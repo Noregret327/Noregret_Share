@@ -1,4 +1,201 @@
-# Python环境安装及编译过程中的一些问题
+# Python环境安装及编译问题
+
+## 一.操作命令
+
+### 1、激活环境
+
+在CMD下，输入
+
+```
+activate
+```
+
+再继续输入(env：为要激活的环境名字)
+
+```
+conda activate env
+```
+
+
+
+### 2、操作
+
+#### 安装最新的pip/conda/anaconda
+
+```
+python -m pip install --upgrade pip
+
+conda update conda
+
+conda update anaconda
+```
+
+
+
+#### 安装/查看/删除包
+
+查看所有包
+
+```
+conda list
+```
+
+安装Numpy
+
+```
+conda install numpy
+```
+
+卸载所有Numpy
+
+```
+conda uninstall numpy
+```
+
+查看Numpy的版本
+
+```
+pip show numpy
+```
+
+卸载所以的Numpy
+
+```
+pip uninstall numpy
+```
+
+安装最新的Numpy
+
+```
+pip install numpy
+```
+
+安装某个版本的Numpy(例：Numpy版本为1.16.4)
+
+```
+pip install numpy==1.16.4
+```
+
+直接安装tensorflow
+
+```
+pip install --upgrade --ignore-installed tensorflow
+```
+
+#### 更改版本
+
+在Anaconda环境下，进入对应的环境（以tensorflow环境为例）
+
+```
+conda activate tensorflow
+```
+
+先查看numpy版本
+
+```
+conda list
+```
+
+卸载numpy
+
+```
+conda uninstall numpy
+```
+
+安装相应版本numpy
+
+```
+conda install numpy==1.23.0
+```
+
+或用pip安装
+
+```
+pip install numpy==1.23.0
+```
+
+
+
+
+
+### 3、源操作
+
+###### 查看源
+
+```
+conda config --show
+```
+
+###### 恢复默认源
+
+```
+conda config --remove-key channels
+```
+
+
+
+##### 换源一
+
+利用cmd命令换源
+
+###### 清华源
+
+```
+conda config --add channels http://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/msys2/
+conda config --add channels http://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge
+conda config --add channels http://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free/
+conda config --add channels http://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch/
+conda config --add channels http://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main/
+conda config --set show_channel_urls yes
+```
+
+###### 中科大源
+
+```
+conda config --add channels http://mirrors.ustc.edu.cn/anaconda/pkgs/main/
+conda config --add channels http://mirrors.ustc.edu.cn/anaconda/pkgs/free/
+conda config --add channels http://mirrors.ustc.edu.cn/anaconda/cloud/conda-forge/
+conda config --add channels http://mirrors.ustc.edu.cn/anaconda/cloud/msys2/
+conda config --add channels http://mirrors.ustc.edu.cn/anaconda/cloud/bioconda/
+conda config --add channels http://mirrors.ustc.edu.cn/anaconda/cloud/menpo/
+conda config --set show_channel_urls yes
+```
+
+
+
+##### 换源二
+
+修改文本
+
+路径
+
+```
+C:\Users\14224\.condarc
+```
+
+用文本打开
+
+```
+channels:
+  - defaults
+show_channel_urls: true
+default_channels:
+  - http://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main
+  - http://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r
+  - http://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2
+custom_channels:
+  conda-forge: http://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  msys2: http://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  bioconda: http://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  menpo: http://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  pytorch: http://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  simpleitk: http://mirror
+  s.tuna.tsinghua.edu.cn/anaconda/cloud
+```
+
+
+
+## 二.环境安装
 
 ### 一：Pytorch
 
@@ -156,13 +353,9 @@ import tensorflow
 exit()
 ```
 
-#### 环境问题
+#### 
 
-
-
-
-
-### 四、各个环境安装命令
+### 四、环境包命令
 
 #### 1、skimage
 
@@ -226,9 +419,31 @@ pip install scikit-learn
 pip install sklearn -i https://pypi.doubanio.com/simple
 ```
 
+#### 4、d2l
 
+conda安装
 
-### 五、OpenCV
+```
+conda install d2l==0.17.6
+```
+
+pip安装
+
+```
+pip install d2l==0.17.6
+```
+
+安装报错——删掉d2l和pandas的安装包，重新安装。错误解除。
+
+```
+pip list
+conda remove d2l
+conda remove pandas
+conda install d2l
+conda install pandas
+```
+
+#### 5、OpenCV
 
 在Anaconda Prompt下，输入
 
@@ -242,115 +457,7 @@ PS：conda中没有opencv，用pip下载
 
 
 
-### 六：初次无法激活环境的问题
-
-在CMD下，输入
-
-```
-activate
-```
-
-再继续输入(env：为要激活的环境名字)
-
-```
-conda activate env
-```
-
-
-
-### 七：关于Numpy的问题
-
-#### 在CMD下，安装最新的pip
-
-```
-python -m pip install --upgrade pip
-```
-
-#### 在Anaconda Prompt下，(可以用conda，也可以用pip)
-
-查看所有包
-
-```
-conda list
-```
-
-安装Numpy
-
-```
-conda install numpy
-```
-
-卸载所有Numpy
-
-```
-conda uninstall numpy
-```
-
-查看Numpy的版本
-
-```
-pip show numpy
-```
-
-卸载所以的Numpy
-
-```
-pip uninstall numpy
-```
-
-安装最新的Numpy
-
-```
-pip install numpy
-```
-
-安装某个版本的Numpy(例：Numpy版本为1.16.4)
-
-```
-pip install numpy==1.16.4
-```
-
-直接安装tensorflow
-
-```
-pip install --upgrade --ignore-installed tensorflow
-```
-
-#### 更改某个版本numpy
-
-在Anaconda环境下，进入对应的环境（以tensorflow环境为例）
-
-```
-conda activate tensorflow
-```
-
-先查看numpy版本
-
-```
-conda list
-```
-
-卸载numpy
-
-```
-conda uninstall numpy
-```
-
-安装相应版本numpy
-
-```
-conda install numpy==1.23.0
-```
-
-或用pip安装
-
-```
-pip install numpy==1.23.0
-```
-
-
-
-### 八：编译过程中遇到的问题
+### 五：编译过程中遇到的问题
 
 #### **Requirement already satisfied**的问题
 
