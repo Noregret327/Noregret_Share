@@ -198,6 +198,58 @@ arm-linux-gnueabihf-gcc -v
 
 
 
+## 七.装pip/pip3
+
+### pip
+
+##### 1.安装epel-release
+
+```
+yum install -y epel-release
+```
+
+##### 2.enable epel
+
+```
+yum-config-manager --enable epel
+```
+
+##### 3.安装pip
+
+```
+yum install python-pip
+```
+
+##### 4.确认版本
+
+```
+pip --version
+```
+
+##### 5.更新到最新
+
+```
+python -m pip install --upgrade pip
+//或
+python -m pip install --upgrade pip -i https://pypi.douban.com/simple
+```
+
+### pip3
+
+##### 1.安装pip3
+
+```
+yum install --assumeyes python3-pip
+```
+
+##### 2.验证
+
+```
+pip3 -v
+```
+
+
+
 ## 错误汇总
 
 * 错误1
