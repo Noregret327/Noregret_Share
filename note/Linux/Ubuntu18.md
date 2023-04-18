@@ -48,6 +48,24 @@ sudo apt install python3-pip
 sudo apt install python2
 ```
 
+- 安装pip
+
+```
+sudo apt install python-pip
+```
+
+
+
+#### 3.安装gcc/g++/make/wget/unzip
+
+- 安装前先把apt更新到最新
+
+```
+sudo apt-get install gcc g++ make wget unzip libopencv-dev pkg-config
+```
+
+
+
 
 
 ## 报错
