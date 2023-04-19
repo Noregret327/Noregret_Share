@@ -34,3 +34,21 @@ ssh-keygen -t rsa -C "520@qq.com"
 4、打开https://github.com/，在ssh设置里把“id_rsa.pub”文件里的内容粘贴进去就行
 
 ![image-20221115161435193](C:\Users\14224\AppData\Roaming\Typora\typora-user-images\image-20221115161435193.png)
+
+## 恢复版本
+
+```bash
+git checkout HEAD text.py
+```
+
+从最后一次提交里面恢复版本
+
+
+
+## 增加单个文件
+
+```bash
+git add text.py
+```
+
+加入暂存区
