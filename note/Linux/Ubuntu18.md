@@ -66,6 +66,14 @@ sudo apt-get install gcc g++ make wget unzip libopencv-dev pkg-config
 
 
 
+#### 4.将Windows复制的文字或文件粘贴到VMware
+
+```
+sudo apt-get upgrade
+sudo apt-get install open-vm-tools-desktop fuse
+sudo reboot
+```
+
 
 
 ## 报错
@@ -89,4 +97,8 @@ sudo rm /var/lib/dpkg/lock
 sudo rm /var/lib/dpkg/lock-frontend
 sudo rm /var/cache/apt/archives/lock
 ```
+
+
+
+
 
