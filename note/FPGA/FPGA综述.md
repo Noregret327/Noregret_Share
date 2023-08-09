@@ -148,6 +148,58 @@ ACAP采用赛灵思第四代硅片堆叠技术SSI，针对SSI技术延时较高�
 
 主要讲诉的是Catapult的项目，将英特尔的Stratix V系列FPGA部署到了自家数据中心的1632台服务器中，并使用FPGA对必应搜索引擎的文件排名运算进行了硬件加速，最终得到了高达95%的吞吐量提升。
 
+2016年，微软在计算机体系架构顶级会议MICRO上发表了名为A Cloud——Scale Acceleration Architecture的论文，介绍了Catapult项目的新一代架构和技术细节。
+
+<font color=green font size=4>第一阶段：</font>单板多FPGA的方案，每块加速卡上集成6片赛灵思的Virtix-6系列FPGA，各FPGA之间通过自身的I/O端口相连和通信。（缺点：灵活性极差，只有PCIe接口，没有其他任何网络接口，板卡之间的通信带宽势必会受到很大的限制；同构性极差，需要采购和配置额外的服务器。）
+
+<font color=green font size=4>第二阶段：</font>仍采用FPGA加速卡的实现方式，不同之处在于，加速卡的架构从单板多FPGA，变成了单板单FPGA的架构（芯片为Altera的Stratix V）。第二代FPGA架构的主要特点是使用了名为“Shell&Role”的系统架构。
+
+<font color=grenn font size=4>Shell：</font>包含了通用的系统基础架构和IP，例如内存控制器、PCIe、DMA模块、各种I/O接口和控制器等；
+
+<font color=grenn font size=4>Role：</font>本质为可重构区域，提供了与Shell相连的标准化接口，用来实现各类用户应用。
+
+<font color=grenn font size=4>在软件方面：</font>对数据中心软件和服务器软件分别进行了修改，加入了名为Mapping Manager和Health Manager的模块，前者用来根据给定的应用对FPGA进行配置，后者用来管理和检测FPGA和其他服务的正常运行。
+
+<font color=grenn font size=4>主要工作：</font>将Bing搜索引擎中原先超过3万行C++代码的文件排名运算，卸载到了FPGA上进行硬件加速，并得到了惊人的结果。与已经深度优化纯软件方案比，在延时一样下吞吐量提升一倍，在相同吞吐量下延时降低29%。
+
+<font color=green font size=4>第三阶段：</font>主要是取消FPGA互联的第二级网络（Torus网络），直接将FPGA与数据中心网络进行连接。更改新版的硬件布局，主要好处如下：
+
+1. 可以使用FPGA加速数据中心的各类网络功能和存储功能。
+2. FPGA不再与CPU在地理位置上紧密耦合。
+3. 延续上一代的Shell&Role结构，并增加了一些新的功能。（增加了40Gbps网络数据处理流水线，包括两个40Gbps MAC/PHY以及数据包处理逻辑；还使用FPGA上的硬件逻辑实现了前文提到的LTL协议，用来完成FPGA之间的通信。）
+
+### 6、云服务——FaaS
+
+亚马逊为代表的云服务提供商，拓展了一种模式名为“FPGA as a Service，FaaS”。这可以使得广大公有云的用户和开发者可以相对方便地使用和开发FPGA，开发者使用Vivado工具进行综合、布局布线、时序优化以及仿真调试等步骤，只不过这些步骤都需要借助AWS（Amazon Web Service）提供的AMI（Amazon Machine Image，操作系统的映像）环境完成。——（云FPGA）
+
+
+
+## ！！！顶级国际学术会议：FPGA、FCCM、FPT、FPL
+
+FPGA：ACM/SIGDA International Symposium on Field-Programmable Gate Arrays——FPGA国际研讨会/FPGA大会。始于1993年，每年举办地点：美国加州的滨海城市Monterey。每年会议接收并全文发表的文章大约30篇，还有不少海报论文，以及各种讲座、演示、讨论等。全文发表的文章每篇10页，工作量和质量都堪比期刊论文。
+
+FCCM：IEEE Symposium on Field-Programmable Custom Computing Machines——IEEE现场可编程自定义计算研讨会，它常年在北美各地巡回举办。
+
+FPT：International Conference on Field-Programmable Technology——现场可编程技术国际会议，始于2002年，每年在亚太地区举办。
+
+FPL：Field-Programmable Logic，始于1991年，每年在欧洲各个大学巡回举办。
+
+
+
+清华汪玉教授的神经网络压缩算法文章获得了2017年“FPGA大会”的最佳论文奖！
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
