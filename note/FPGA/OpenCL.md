@@ -86,3 +86,4 @@ TensorFlow被广泛应用于各种领域，包括图像识别、语音识别、�
 
 1. <font color=Blue font>定义计算图</font>：在定义计算图时，只要确定了<font color=Red font>节点</font>和<font color=Red font>边线</font>，就可以完成计算图的定义
 2. <font color=Blue font>运行计算图</font>：运行计算图是指输入数据在定义好的计算图中经过节点计算并通过边线流向输出的过程。
+
