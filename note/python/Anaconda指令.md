@@ -20,6 +20,18 @@ pip list
 
 //查看配置
 conda config --show
+
+//安装notebook
+pip install notebook -i https://pypi.doubanio.com/simple
+/*
+//cd进入到文件目录，输入
+//jupyter notebook
+*/
+
+//安装插件
+conda install nb_conda
+//进入虚拟环境，安装jupyter
+conda install jupyter
 ```
 
 
