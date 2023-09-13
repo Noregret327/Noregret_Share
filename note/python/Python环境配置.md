@@ -533,6 +533,6 @@ loss_fn(model(X), Y)
 
 修改代码：（在数据后面加‘.float（）’）
 
-```
+```y
 loss_fn(model(X).float(), Y.float())
 ```
