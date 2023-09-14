@@ -1079,7 +1079,7 @@ plt.legend()
 
 
 
-### 6.1 完整代码
+### 6.1 手写数字分类 全连接模型
 
 ```python
 import torch
@@ -1207,11 +1207,13 @@ for epoch in range(epochs):
 plt.plot(range(1, epochs+1), train_loss, label='train_loss')
 plt.plot(range(1, epochs+1), test_loss, label='test_loss')
 plt.legend()
+plt.show()
 
 # 绘制acc变化
 plt.plot(range(1, epochs+1), train_acc, label='train_acc')
 plt.plot(range(1, epochs+1), test_acc, label='test_acc')
 plt.legend()
+plt.show()
 ```
 
 
@@ -1234,8 +1236,307 @@ plt.legend()
 - <font color=red size=5>曲线</font>对应于损失函数；<font color=red size=5>点</font>表示<font color=0x0ff size=4>权值的当前值</font>，即现在所在的位置；<font color=red size=5>梯度</font>用<font color=0x0ff size=4>箭头表示，表明为了增加损失，需要向右移动</font>；箭头的长度概念化地表示了如果在对应的方向移动，函数值能够增长多少。如果向着梯度的反方向移动，则损失函数的值会相应减少。沿着损失函数减少的方向移动，并再次计算梯度值，并重复上述过程，直至梯度的模为0，将到达损失函数的极小值点。这正是我们的目标。
 - <font color=red size=5>**梯度**</font>就是表明<font color=0x0ff size=4>**损失函数相对参数的变化率**</font>。
 
+
+
 ### 7.2 学习速率
+
+#### 7.2.1 学习速率
 
 - <font color=0x0ff size=4>对梯度进行缩放的参数</font>被称为<font color=red size=5>学习速率（learning rate）</font>
 - 如果学习速率太小，则找到损失函数极小值点时可能需要许多轮迭代；如果太大，则算法可能会“跳过”极小值点并且因周期性的“跳跃”而永远无法找到极小值点。
+- 在具体实践中，可通过查看损失函数值随时间的变化曲线，来判断学习速率的选取是合适的。
+- 合适的学习速率，损失函数随时间下降，直到一个底部；不合适的学习速率，损失函数可能会发生震荡。
+- 在调整学习速率时，即需要使其足够小，保证不至于发生超调，也要保证它足够大，以使损失函数能够尽快下降，从而可通过较少次数的迭代更快地完成学习
+
+#### 7.2.2 局部极值点
+
+- 可通过将权值随机初始化来改善局部极值的问题。
+- 权值的初值使用随机值，可以增加从靠近全局最优点附件开始下降的机会。
+
+
+
+### 7.3 反向传播算法
+
+- 反向传播算法是一种高效计算数据流图中梯度的技术
+- **每一层的导数**都是**最后一层的导数与前一层输出之积**，这正是<font color=red size=5>链式法则</font>的奇妙之处，误差反向传播算法利用的正是这一特点。
+- 前馈时，从输入开始，**逐一计算每个隐含层的输出，直到输出层**。然后开始**计算导数**，并<font color=0x0ff size=4>从输出层经各隐含层逐一反向传播。</font>为了减少计算量，还需对所有已完成计算的元素进行复用。这便是反向传播算法的由来。
+
+
+
+### 7.4 优化函数
+
+优化器（optimizer）是根据反向传播计算出的梯度，优化模型参数的内置方法。
+
+#### SGD：随机梯度下降优化器
+
+- 随机梯度下降优化器SGD和min-batch是同一个意思，抽取m个小批量（独立同分布）样本，通过计算他们平均梯度均值。
+
+- lr：float >= 0.学习率
+- momentum：float >= 0.参数，用于加速SGD在相关方向上前进，并抑制震荡。
+
+#### RMSprop：
+
+- 经验上，它被证明有效且实用的深度学习网络优化算法
+- 它增加了一个衰减系数来控制历史信息的获取多少。
+- 它会对学习率进行衰减。
+- 特别适合优化序列的问题
+
+#### Adam：
+
+- 它可以看做是修正后的Momentum+RMSprop算法
+- 它通常被认为对超参数的选择相当鲁棒性
+- 学习率建议：0.001
+- 它是一种可以替代传统随机梯度下降过程的一阶优化算法，它能基于训练数据迭代地更新神经网络权重。
+- 它通过计算梯度的一阶矩估计和二阶矩估计而为不同的参数设计独立的自适应学习率。
+
+
+
+### 7.5 基础总结
+
+#### 7.5.1 创建模型的三种方法
+
+1. 单层创建	nn.Linear
+2. torch.nn.Sequential
+3. 自定义类（继承自nn.Module）
+
+
+
+#### 7.5.2 数据输入方式
+
+1. 从ndarray创建Tensor直接切片输入
+2. 使用torch.utils.data.TensorDataset创建dataset
+3. 使用torchvision.dataset的内置数据集
+4. 使用torch.utils.data.Dataloader封装
+
+ 
+
+#### 7.5.3 模型训练的步骤
+
+1. 预处理数据
+2. 创建模型和优化方法
+3. 模型调用
+4. 计算损失
+5. 梯度归零
+6. 计算梯度
+7. 优化模型
+8. 打印指标
+
+
+
+### 7.6 不同问题使用的损失函数和输出设置
+
+#### 一、回归问题
+
+预测连续的值叫做回归问题
+
+- 损失函数：均方误差 mse
+- 输出层激活方式：无
+
+#### 二、二分类问题
+
+回答是和否的问题
+
+- 损失函数：BCEloss
+- 输出激活层激活方式：sigmoid
+
+或
+
+- 损失函数：CrossEntropyLoss
+- 输出层激活方式：无
+
+#### 三、多分类问题
+
+多个分类的问题，输出与分类个数相同长度的张量
+
+- 损失函数：CrossEntropyLoss
+- 输出层激活方式：无
+
+或
+
+- 损失函数：nn.NLLLoss——要求labels必须是独热编码方式
+- 输出层激活方式：torch.log_softmax
+
+
+
+## 8.计算机视觉
+
+### 8.1 CNN
+
+#### 8.1.1 卷积神经网络
+
+主要应用于计算机视觉相关任务，但它能处理的任务并不局限于图像，其实语音识别也是可以使用卷积神经网络。
+
+- 当计算机看到一张图像（输入一张图像）时，它看到的是一大堆像素值。
+- 当我们人类对图像进行分类时，这些数字毫无用处，可它们却是计算机可获取的唯一输入。
+- 现在的问题是：当你提供给计算机这一数组后，它将输出描述该图像属于某一特定分类的概率的数字（比如：80%是猫、15%是狗、5%是鸟）
+- CNN工作方式：计算机通过寻找诸如边缘和曲线之类的低级特点来分类图片，继而通过一系列卷积层级构建出更为抽象的概念。
+
+#### 8.1.2 CNN工作：
+
+1. <font color=red size=4>卷积层</font>：用于检测输入数据中的特征，例如图像中的边缘、纹理和形状等。——<font color=red size=4>conv2d</font>
+2. <font color=red size=4>非线性层（激活层）</font>：将卷积层的输出经过激活函数，将负数置零，从而引入非线性，使网络能够学习更复杂的特征。——<font color=red size=4>relu/sigmoid/tanh</font>
+3. <font color=red size=4>池化层</font>：用于减小特征图的空间维度，降低计算复杂性，并且使模型对位置的变化更加稳定。——<font color=red size=4>pooling2d</font>
+4. <font color=red size=4>全链接层</font>：将前面层的所有特征连接到每个神经元，用于进行最终的分类或回归操作。——<font color=red size=4>w*x+b</font>
+
+（如果没有这些层，模型很难与复杂模型匹配，因为网络将有过多的信息填充，也就是其他那些层作用就是突出重要信息，降低噪声）
+
+#### 8.1.3 什么是卷积？
+
+- <font color=blue size=4>卷积</font>是指将卷积核应用到某个张量的所有点上，通过将卷积核在输入的张量上滑动而生成经过滤波处理的张量。
+- 总结：<font color=blue size=4>**卷积就是完成对图像特征的提取或者说信息匹配**</font>
+
+#### 8.1.4 卷积层
+
+三个参数：
+
+- ksize：卷积核大小
+- strides：卷积核移动的跨度
+- padding：边缘填充
+
+#### 8.1.5 非线性变化层
+
+- relu
+- sigmoid
+- tanh
+
+#### 8.1.6 池化层
+
+- layers.MaxPooling2D：最大池化
+- nn.AvgPool2d(2,stride=2)：平均池化
+- nn.AdaptiveAvgPool2d(output_size=(100,100))：自适应平均池化
+
+#### 8.1.7 全连接层
+
+将最后的输出与全部特征连接，我们要使用全部的特征，为最后的分类的做出决策。
+
+最后配合softmax进行分类。
+
+
+
+### 8.2 手写数字分类 卷积模型
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import numpy as np
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+import torchvision
+from torchvision import datasets, transforms
+
+transformmation = transforms.Compose([
+    transforms.ToTensor()
+])
+
+# 导入数据集
+train_ds = datasets.MNIST(
+    'data/',
+    train = True,
+    transform = transformmation,
+    download = False
+)
+test_ds = datasets.MNIST(
+    'data/',
+    train = False,
+    transform = transformmation,
+    download = False
+)
+train_dl = torch.utils.data.DataLoader(train_ds, batch_size=64, shuffle=True)
+test_dl = torch.utils.data.DataLoader(test_ds, batch_size=256)
+
+# 创建卷积模型
+class Model(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(1, 6, 5)
+        self.pool = nn.MaxPool2d((2, 2))
+        self.conv2 = nn.Conv2d(6, 16, 5)  
+        self.liner_1 = nn.Linear(16*4*4, 256)            
+        self.liner_2 = nn.Linear(256, 10)               
+    def forward(self, input):
+        x = F.relu(self.conv1(input))
+        x = self.pool(x)
+        x = F.relu(self.conv2(x))
+        x = self.pool(x) 
+#         print(x.self())              # torch.size([64, 16, 4, 4])
+        x = x.view(x.size(0), -1)                       # 将图片展平
+        x = F.relu(self.liner_1(x))
+        x = self.liner_2(x)
+        return x
+        
+# 通用训练模型定义
+def fit(epoch, model, trainloader, testloader):
+    # 训练模型
+    correct = 0													# 新建正确个数变量
+    total = 0													# 新建总的个数变量
+    running_loss = 0											# 新建loss个数变量
+    for x, y in trainloader:
+        y_pred = model(x)
+        loss = loss_fn(y_pred, y)
+        optim.zero_grad()
+        loss.backward()
+        optim.step()
+        with torch.no_grad():
+            y_pred = torch.argmax(y_pred, dim=1)				# 记录预测值
+            correct += (y_pred == y).sum().item()				# 计算正确个数
+            total += y.size(0)									# 计算总的个数（y.size(0)：y真实值，size(0):运行样本个数）
+            running_loss += loss.item()							# 计算loss个数
+    # 求解每个样本的loss和acc        
+    epoch_loss = running_loss / len(trainloader.dataset)		# 求解每个样本的loss
+    epoch_acc = correct / total									# 求解每个样本的正确率
+    
+    
+    # 验证测试
+    test_correct = 0
+    test_total = 0
+    test_running_loss = 0
+    with torch.no_grad():
+        for  x, y in testloader:
+            y_pred = model(x)
+            loss = loss_fn(y_pred, y)
+            y_pred = torch.argmax(y_pred, dim=1)
+            test_correct += (y_pred == y).sum().item()
+            test_total += y.size(0)
+            test_running_loss += loss.item()
+    # 求解test的loss和acc         
+    epoch_test_loss = test_running_loss / len(testloader.dataset)
+    epoch_test_acc = test_correct / test_total
+        
+    print('epoch:', epoch, 
+          'loss:', round(epoch_loss, 3),
+          'accuracy:', round(epoch_acc, 3),
+          'test_loss:', round(epoch_test_loss, 3),
+          'test_accuracy:', round(epoch_test_acc, 3)
+         )
+        
+    return epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc
+
+# 训练输入定义
+epochs = 20
+model = Model()
+loss_fn = torch.nn.CrossEntropyLoss()           # 定义损失函数
+optim = torch.optim.Adam(model.parameters(), lr=0.0001)        # 定义优化函数
+
+# 记录训练集和测试集的loss和acc
+train_loss = []
+train_acc = []
+test_loss = []
+test_acc = []
+
+# 开始训练
+for epoch in range(epochs):
+    epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc = fit(epoch,
+                                                                 model,
+                                                                 train_dl,
+                                                                 test_dl)
+    train_loss.append(epoch_loss)
+    train_acc.append(epoch_acc)
+    test_loss.append(epoch_test_loss)
+    test_acc.append(epoch_test_acc)
+```
+
+
 
