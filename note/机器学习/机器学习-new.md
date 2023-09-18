@@ -1538,5 +1538,1583 @@ for epoch in range(epochs):
     test_acc.append(epoch_test_acc)
 ```
 
+### 8.3 四种天气图片分类
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import numpy as np
+import matplotlib.pyplot as plt
+%matplotlib inline
+import torchvision
+import os
+import shutil
+
+from torchvision import datasets, transforms
+torchvision.datasets.ImageFolder        			# 从分类的文件夹中创建数据集
+
+# 创建数据集，并分类
+base_dir = r'./dataset/4weather'					# 创建数据集基本目录
+train_dir = os.path.join(base_dir, 'train')			# 在数据集基本目录创建训练集目录
+test_dir = os.path.join(base_dir, 'test')			# 在数据集基本目录创建测试集目录
+species = ['cloudy', 'rain', 'shine', 'sunrise']	# 定义类型集合
+image_dir = r'./data/dataset2/'						# 数据集图片原始位置
 
 
+if not os.path.isdir(base_dir):						# 判断是否创建了数据集基本目录，如果没有就执行下面运算
+    os.make(base_dir)								# 创建数据集基本目录
+    os.mkdir(train_dir)								# 创建训练集目录
+    os.mkdir(test_dir)								# 创建测试集目录
+    
+
+# 创建新的四种天气文件夹——从train和test文件夹中分别创建
+# for train_or_test in ['train', 'test']:
+#     for spec in species:
+#         os.mkdir(os.path.join(base_dir, train_or_test, spec))
+
+
+# 从数据集中提取图片——并分类到各个train和test文件夹中（1/5的测试集划分）
+# for i, img in enumerate(os.listdir(image_dir)):
+#     for spec in species:
+#         if spec in img:
+#             s = os.path.join(image_dir, img)
+#             if i%5 == 0:
+#                 d = os.path.join(base_dir, 'test', spec, img)
+#             else:
+#                 d = os.path.join(base_dir, 'train', spec, img)
+#             shutil.copy(s, d )
+
+# 查看文件夹中各个文件夹里面的文件数
+for train_or_test in ['train', 'test']:
+    for spec in species:
+        print(train_or_test, spec, len(os.listdir(os.path.join(base_dir, train_or_test, spec))))
+//////////////////////////
+# train cloudy 240
+# train rain 172
+# train shine 202
+# train sunrise 286
+# test cloudy 60
+# test rain 43
+# test shine 51
+# test sunrise 71
+/////////////////////////
+
+# 创建数据集对象——tranform、train_ds、test_ds
+transform = transforms.Compose([
+    transforms.Resize((96, 96)),					# 将输入的图像调整为大小为 96x96	
+    transforms.ToTensor(),							# 将调整尺寸后的图像转换为 PyTorch 的张量（tensor）
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],		# 对图像进行标准化处理，以便将像素值范围缩放到 -1 到 1 之间。
+                         std=[0.5, 0.5, 0.5])		# 它从每个通道（红色、绿色和蓝色）中减去均值（0.5）并将结果除以标准差（0.5）
+])													# 助于提高模型的训练稳定性和性能，因为它有助于确保输入数据的分布类似于标准正态分布。
+train_ds = torchvision.datasets.ImageFolder(		# 使用 PyTorch 的 ImageFolder 数据集类来创建一个数据集对象
+    train_dir, 										# 包含训练图像数据的文件夹路径
+    transform=transform								# 使用了之前定义的 transform 对象
+)
+test_ds = torchvision.datasets.ImageFolder(
+    test_dir, 										# 包含测试图像数据的文件夹路径
+    transform=transform
+)
+
+# 查看数据的类型和索引标号
+train_ds.classes									# 输出：['cloudy', 'rain', 'shine', 'sunrise']
+train_ds.class_to_idx								# 输出：{'cloudy': 0, 'rain': 1, 'shine': 2, 'sunrise': 3}
+len(train_ds), len(test_ds)							# 输出：(900, 225)
+
+
+# 创建加载器——train_dl、test_dl
+BATCHSIZE = 16										# 批量大小被设置为 16，意味着每次加载 16 个样本进行训练或测试
+train_dl = torch.utils.data.DataLoader(				# 创建了一个训练数据加载器 train_dl。
+    train_ds,
+    batch_size=BATCHSIZE,
+    shuffle=True									# 这个参数指示数据加载器在每个训练周期（epoch）开始时是否对训练数据进行洗牌（随机打乱顺序）
+)													# 随机化数据的顺序可以帮助模型更好地学习。							
+test_dl = torch.utils.data.DataLoader(
+    test_ds,
+    batch_size=BATCHSIZE
+)
+
+# 取出一个批次的图像和标签看看数据集
+imgs, labels = next(iter(train_dl))					# 提取一个批次的训练数据
+imgs.shape											# 输出：torch.Size([16, 3, 96, 96])
+imgs[0].shape										# 输出：torch.Size([3, 96, 96])
+im = imgs[0].permute(1, 2, 0)            			# 交换channel和宽、高的位置
+im.shape											# 输出：torch.Size([96, 96, 3])
+
+# 类和标签的转换
+train_ds.class_to_idx								# {'cloudy': 0, 'rain': 1, 'shine': 2, 'sunrise': 3}
+id_to_class = dict((v, k) for k, v in train_ds.class_to_idx.items())	# 利用字典方式交换标签和类名
+id_to_class											# 输出：{0: 'cloudy', 1: 'rain', 2: 'shine', 3: 'sunrise'}
+
+# 自己加载和查看数据集的方法
+plt.figure(figsize=(12, 8))							
+for i, (img, label) in enumerate(zip(imgs[:6], labels[:6])):
+    img = (img.permute(1, 2, 0).numpy() + 1)/2
+    plt.subplot(2, 3, i+1)
+    plt.title(id_to_class.get(label.item()))
+    plt.imshow(img)
+    
+# 创建模型
+class Net(nn.Module):                       		# 创建模型
+    def __init__(self):                      		# 对所有层进行初始化定义
+        super(Net, self).__init__()          		# 继承所有父类属性
+        self.conv1 = nn.Conv2d(3, 16, 3)     		# 定义第一个卷积层
+        self.conv2 = nn.Conv2d(16, 32, 3)    		# 定义第二个卷积层
+        self.conv3 = nn.Conv2d(32, 64, 3)    		# 定义第三个卷积层
+        self.pool = nn.MaxPool2d(2, 2)       		# 定义池化层
+        self.fc1 = nn.Linear(64*10*10, 1024) 		# 定义全连接层（卷积层之后的图像大小需要计算）
+        self.fc2 = nn.Linear(1024, 4)        		# 定义全连接层（最后输出为：4（4个分类））
+    def forward(self, x):                   		# 定义调用前向传播过程
+        x = F.relu(self.conv1(x))            		# 第一个激活卷积层
+        x = self.pool(x)                     		# 池化
+        x = F.relu(self.conv2(x))           		# 第二个激活卷积层
+        x = self.pool(x)                     		# 池化
+        x = F.relu(self.conv3(x))            		# 第三个激活卷积层
+        x = self.pool(x)                     		# 池化
+#        print(x.size())                      		# 打印层数
+#        x = x.view(-1, x.size(1)*x.size(2)*x.size(3)) 
+        x = x.view(-1, 64*10*10)
+        x = F.relu(self.fc1(x))              		# 第四个激活全链接层
+        x = self.fc2(x)                      		# 最后一个全链接层
+        return x
+
+model = Net()
+model(imgs)               							# 第一全链接层Linear的输入参数为64 * 10 * 10
+preds = model(imgs)
+imgs.shape											# 输出：torch.Size([16, 3, 96, 96])
+preds.shape      								# 查看预测结果输出，其结果应该有四个（代表四类），最大的为预测结果 输出：torch.Size([16, 4])
+torch.argmax(preds, 1)      						# 算出预测结果
+
+//////////////////////////////////////////
+# 放在GPU训练方法
+if torch.cuda.is_available():
+    model.to('cuda')
+//////////////////////////////////////////
+
+# 定义损失函数和优化函数
+loss_fn = nn.CrossEntropyLoss()
+optim = torch.optim.Adam(model.parameters(), lr=0.001)
+def fit(epoch, model, trainloader, testloader):
+    # 训练模型
+    correct = 0													# 新建正确个数变量
+    total = 0													# 新建总的个数变量
+    running_loss = 0											# 新建loss个数变量
+    for x, y in trainloader:
+        if torch.cuda.is_available():
+            x, y = x.to('cuda'), y.to('cuda')
+        y_pred = model(x)
+        loss = loss_fn(y_pred, y)
+        optim.zero_grad()
+        loss.backward()
+        optim.step()
+        with torch.no_grad():
+            y_pred = torch.argmax(y_pred, dim=1)				# 记录预测值
+            correct += (y_pred == y).sum().item()				# 计算正确个数
+            total += y.size(0)									# 计算总的个数（y.size(0)：y真实值，size(0):运行样本个数）
+            running_loss += loss.item()							# 计算loss个数
+    # 求解每个样本的loss和acc        
+    epoch_loss = running_loss / len(trainloader.dataset)		# 求解每个样本的loss
+    epoch_acc = correct / total									# 求解每个样本的正确率
+    
+    
+    # 验证测试
+    test_correct = 0
+    test_total = 0
+    test_running_loss = 0
+    with torch.no_grad():
+        for  x, y in testloader:
+            if torch.cuda.is_available():
+                x, y = x.to('cuda'), y.to('cuda')
+            y_pred = model(x)
+            loss = loss_fn(y_pred, y)
+            y_pred = torch.argmax(y_pred, dim=1)
+            test_correct += (y_pred == y).sum().item()
+            test_total += y.size(0)
+            test_running_loss += loss.item()
+    # 求解test的loss和acc         
+    epoch_test_loss = test_running_loss / len(testloader.dataset)
+    epoch_test_acc = test_correct / test_total
+        
+    print('epoch:', epoch, 
+          'loss:', round(epoch_loss, 3),
+          'accuracy:', round(epoch_acc, 3),
+          'test_loss:', round(epoch_test_loss, 3),
+          'test_accuracy:', round(epoch_test_acc, 3)
+         )
+        
+    return epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc
+
+# 训练次数
+epochs = 30
+# 记录训练集和测试集的loss和acc
+train_loss = []
+train_acc = []
+test_loss = []
+test_acc = []
+# 开始训练
+for epoch in range(epochs):
+    epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc = fit(epoch,
+                                                                 model,
+                                                                 train_dl,
+                                                                 test_dl)
+    train_loss.append(epoch_loss)
+    train_acc.append(epoch_acc)
+    test_loss.append(epoch_test_loss)
+    test_acc.append(epoch_test_acc)
+    
+plt.plot(range(1, epochs+1), train_acc, label='train_acc')
+plt.plot(range(1,epochs+1), test_acc, label='test_acc')
+plt.legend()
+
+plt.plot(range(1, epochs+1), train_loss, label='train_loss')
+plt.plot(range(1,epochs+1), test_loss, label='test_loss')
+plt.legend()
+    
+    
+# 过拟合
+# 在train数据得到的数据非常好，但是在test数据中得不到很好的数据，test和train差别很大，这是典型过拟合现象
+```
+
+### 8.4 Dropout抑制过拟合
+
+为什么Dropout可以解决过拟合？
+
+1. 取平均的作用（可以将所有神经元权值取平均）
+2. 减少神经元之间复杂的共适应关系：因为dropout程序导致两个神经元不一定每次都在一个dropout网络中出现。权值的更新不再依赖于有固定关系的隐含节点的共同作用，阻止了某些特征仅仅在某些特征仅仅在其他特定特征下才有效果的情况。
+3. 类似于性别在生物进化中的角色：性别的出现可以繁衍出适应新环境的变种，有效的阻止过拟合，即避免环境改变时物种可能面临的灭绝
+
+### 8.5 四种天气图片分类 Dropout抑制过拟合
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import numpy as np
+import matplotlib.pyplot as plt
+%matplotlib inline
+import torchvision
+import os
+import shutil
+
+from torchvision import datasets, transforms
+torchvision.datasets.ImageFolder        			# 从分类的文件夹中创建数据集
+
+# 创建目录
+base_dir = r'./dataset/4weather'					# 创建数据集基本目录
+train_dir = os.path.join(base_dir, 'train')			# 在数据集基本目录创建训练集目录
+test_dir = os.path.join(base_dir, 'test')			# 在数据集基本目录创建测试集目录
+
+# 创建数据集对象——tranform、train_ds、test_ds
+transform = transforms.Compose([
+    transforms.Resize((96, 96)),					# 将输入的图像调整为大小为 96x96	
+    transforms.ToTensor(),							# 将调整尺寸后的图像转换为 PyTorch 的张量（tensor）
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],		# 对图像进行标准化处理，以便将像素值范围缩放到 -1 到 1 之间。
+                         std=[0.5, 0.5, 0.5])		# 它从每个通道（红色、绿色和蓝色）中减去均值（0.5）并将结果除以标准差（0.5）
+])													# 助于提高模型的训练稳定性和性能，因为它有助于确保输入数据的分布类似于标准正态分布。
+train_ds = torchvision.datasets.ImageFolder(		# 使用 PyTorch 的 ImageFolder 数据集类来创建一个数据集对象
+    train_dir, 										# 包含训练图像数据的文件夹路径
+    transform=transform								# 使用了之前定义的 transform 对象
+)
+test_ds = torchvision.datasets.ImageFolder(
+    test_dir, 										# 包含测试图像数据的文件夹路径
+    transform=transform
+)
+
+# 创建加载器——train_dl、test_dl
+BATCHSIZE = 16										# 批量大小被设置为 16，意味着每次加载 16 个样本进行训练或测试
+train_dl = torch.utils.data.DataLoader(				# 创建了一个训练数据加载器 train_dl。
+    train_ds,
+    batch_size=BATCHSIZE,
+    shuffle=True									# 这个参数指示数据加载器在每个训练周期（epoch）开始时是否对训练数据进行洗牌（随机打乱顺序）
+)													# 随机化数据的顺序可以帮助模型更好地学习。							
+test_dl = torch.utils.data.DataLoader(
+    test_ds,
+    batch_size=BATCHSIZE
+)
+
+################################################################################
+# 创建一个Dropout层——有一定抑制过拟合效果
+class Net(nn.Module):                       		# 创建模型
+    def __init__(self):                      		# 对所有层进行初始化定义
+        super(Net, self).__init__()          		# 继承所有父类属性
+        self.conv1 = nn.Conv2d(3, 16, 3)     		# 定义第一个卷积层
+        self.conv2 = nn.Conv2d(16, 32, 3)    		# 定义第二个卷积层
+        self.conv3 = nn.Conv2d(32, 64, 3)    		# 定义第三个卷积层
+        self.drop = nn.Dropout(0.5)                 # 随机丢弃0.5的数据
+        self.pool = nn.MaxPool2d(2, 2)       		# 定义池化层
+        self.fc1 = nn.Linear(64*10*10, 1024) 		# 定义全连接层（卷积层之后的图像大小需要计算）
+        self.fc2 = nn.Linear(1024, 256)        		# 定义全连接层
+        self.fc3 = nn.Linear(256, 4)                # 定义全连接层（最后输出为：4（4个分类））
+    def forward(self, x):                   		# 定义调用前向传播过程
+        x = self.pool(F.relu(self.conv1(x)))        # 第一个池化、激活、卷积层
+        x = self.pool(F.relu(self.conv2(x)))  		# 第二个激活卷积层
+        x = self.pool(F.relu(self.conv3(x)))        # 第三个激活卷积层
+        x = x.view(-1, 64*10*10)
+        x = F.relu(self.fc1(x))              		# 第四个激活全链接层
+        x = self.drop(x)                            # 在全链接层增加一个Dropout层
+        x = F.relu(self.fc2(x))              		# 第五个激活全链接层
+        x = self.drop(x)                            # 在全链接层增加一个Dropout层
+        x = self.fc3(x)                      		# 最后一个全链接层
+        return x
+################################################################################
+# 再添加Dropout2层
+class Net(nn.Module):                       		# 创建模型
+    def __init__(self):                      		# 对所有层进行初始化定义
+        super(Net, self).__init__()          		# 继承所有父类属性
+        self.conv1 = nn.Conv2d(3, 16, 3)     		# 定义第一个卷积层
+        self.conv2 = nn.Conv2d(16, 32, 3)    		# 定义第二个卷积层
+        self.conv3 = nn.Conv2d(32, 64, 3)    		# 定义第三个卷积层
+        self.drop = nn.Dropout(0.5)                 # 随机丢弃0.5的数据
+        self.drop2 = nn.Dropout2d(0.5)              # 增加 Dropout2 层
+        self.pool = nn.MaxPool2d(2, 2)       		# 定义池化层
+        self.fc1 = nn.Linear(64*10*10, 1024) 		# 定义全连接层（卷积层之后的图像大小需要计算）
+        self.fc2 = nn.Linear(1024, 256)        		# 定义全连接层
+        self.fc3 = nn.Linear(256, 4)                # 定义全连接层（最后输出为：4（4个分类））
+    def forward(self, x):                   		# 定义调用前向传播过程
+        x = self.pool(F.relu(self.conv1(x)))        # 第一个池化、激活、卷积层
+        x = self.pool(F.relu(self.conv2(x)))  		# 第二个激活卷积层
+        x = self.pool(F.relu(self.conv3(x)))        # 第三个激活卷积层
+        x = self.drop2(x)                           # 在卷积层后增加 dropout2 层
+        x = x.view(-1, 64*10*10)
+        x = F.relu(self.fc1(x))              		# 第四个激活全链接层
+        x = self.drop(x)                            # 在全链接层增加一个Dropout层
+        x = F.relu(self.fc2(x))              		# 第五个激活全链接层
+        x = self.drop(x)                            # 在全链接层增加一个Dropout层
+        x = self.fc3(x)                      		# 最后一个全链接层
+        return x
+################################################################################
+
+model = Net()
+if torch.cuda.is_available():
+    model.to('cuda')
+    
+////////////////////////////////////////////////////////////////////////////////
+# 添加两个训练模式
+# model.train() 训练模式
+# model.eval() 预测模式 # 主要影响 Dropout层 和 BN层
+
+def fit(epoch, model, trainloader, testloader):
+    # 训练模型
+    correct = 0													# 新建正确个数变量
+    total = 0													# 新建总的个数变量
+    running_loss = 0											# 新建loss个数变量
+    model.train()                                               # 将模型设为训练模式，Dropout发挥作用
+    for x, y in trainloader:
+        if torch.cuda.is_available():
+            x, y = x.to('cuda'), y.to('cuda')
+        y_pred = model(x)
+        loss = loss_fn(y_pred, y)
+        optim.zero_grad()
+        loss.backward()
+        optim.step()
+        with torch.no_grad():
+            y_pred = torch.argmax(y_pred, dim=1)				# 记录预测值
+            correct += (y_pred == y).sum().item()				# 计算正确个数
+            total += y.size(0)									# 计算总的个数（y.size(0)：y真实值，size(0):运行样本个数）
+            running_loss += loss.item()							# 计算loss个数
+    # 求解每个样本的loss和acc        
+    epoch_loss = running_loss / len(trainloader.dataset)		# 求解每个样本的loss
+    epoch_acc = correct / total									# 求解每个样本的正确率
+    
+    
+    # 验证测试
+    test_correct = 0
+    test_total = 0
+    test_running_loss = 0
+    model.eval()                                                 # 将模型设为预测模式，Dropout不发挥作用
+    with torch.no_grad():
+        for  x, y in testloader:
+            if torch.cuda.is_available():
+                x, y = x.to('cuda'), y.to('cuda')
+            y_pred = model(x)
+            loss = loss_fn(y_pred, y)
+            y_pred = torch.argmax(y_pred, dim=1)
+            test_correct += (y_pred == y).sum().item()
+            test_total += y.size(0)
+            test_running_loss += loss.item()
+    # 求解test的loss和acc         
+    epoch_test_loss = test_running_loss / len(testloader.dataset)
+    epoch_test_acc = test_correct / test_total
+        
+    print('epoch:', epoch, 
+          'loss:', round(epoch_loss, 3),
+          'accuracy:', round(epoch_acc, 3),
+          'test_loss:', round(epoch_test_loss, 3),
+          'test_accuracy:', round(epoch_test_acc, 3)
+         )
+        
+    return epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc
+////////////////////////////////////////////////////////////////////////////////
+
+# 记录训练集和测试集的loss和acc
+train_loss = []
+train_acc = []
+test_loss = []
+test_acc = []
+# 开始训练
+for epoch in range(epochs):
+    epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc = fit(epoch,
+                                                                 model,
+                                                                 train_dl,
+                                                                 test_dl)
+    train_loss.append(epoch_loss)
+    train_acc.append(epoch_acc)
+    test_loss.append(epoch_test_loss)
+    test_acc.append(epoch_test_acc)
+
+plt.plot(range(1, epochs+1), train_acc, label='train_acc')
+plt.plot(range(1,epochs+1), test_acc, label='test_acc')
+plt.legend()
+
+plt.plot(range(1, epochs+1), train_loss, label='train_loss')
+plt.plot(range(1,epochs+1), test_loss, label='test_loss')
+plt.legend()
+
+```
+
+只有Dropout层时的抑制效果为：
+
+![image-20230918151321633](https://raw.githubusercontent.com/Noregret327/picture/master/202309181513680.png)
+
+增加Dropout2层时的抑制效果为：
+
+![image-20230918145845677](https://raw.githubusercontent.com/Noregret327/picture/master/202309181458746.png)
+
+### 8.6 标准化
+
+#### 1）什么是标准化：
+
+- 传统机器学习中标准化也叫做归一化，一般是<font color=blue size=4>**将数据映射到指定的范围，用于去除不同维度数据的量纲以及量纲单位。**</font>
+- 数据标准化让机器学习模型看到的<font color=red size=4>**不同样本彼此之间更加相似**</font>，这有助于模型的学习与对新数据的泛化。
+
+#### 2）常见的数据标准化形式：
+
+- 标准化
+- 归一化
+
+#### 3）归一化：
+
+- 归一化：Normalization
+- 将数据减去其平均值使其中心为0，然后将数据除以其他标准差使其标准差为1——<font color=red size=4>**（将数据分布在0~1之间——减均值、除方差）**</font>
+
+#### 4）批标准化：
+
+- 批标准化：Batch Normalization
+- 批标准化和普通的数据标准化类似，是将分散的数据统一的一种做法，也是优化神经网络的一种方法
+- <font color=blue size=4>**不仅在将数据输入模型之前对数据做标准化，在网络的每一次变换之后都应该考虑数据标准化**</font>
+- 即使在训练过程中均值和方差随时间发生变化，它也可以适应性地将数据标准化
+- <font color=red size=4>**批标准化解决的问题是梯度消失与梯度爆炸。**</font>
+
+#### 5）批标准化的好处：
+
+- 具有正则化的效果——（正则化是一种用于控制机器学习模型复杂度的技术，目的是防止模型在训练数据上过拟合。）
+- 提高模型的泛化能力——（模型的泛化能力指的是模型在未见过的新数据上的性能表现。一个好的机器学习模型应该能够在训练数据之外的数据上做出准确的预测或泛化。）
+- 允许更高的学习速率从而加速收敛——（学习速率是深度学习和梯度下降优化算法中的一个重要超参数。它决定了在每次参数更新时，模型权重（参数）的调整幅度。）
+- 批标准化有助于梯度传播，因此允许更深的网络，对于<font color=blue size=4>**有些特别深的网络，只有包含多个Batch Normalization层时才能进行训练。**</font>
+
+#### 6）批标准化的实现：
+
+- BatchNormalization层通常在卷积层或密集连接层之后使用
+
+1. nn.BatchNorm1d()
+2. nn.BatchNorm2d()
+
+#### 7）批标准化的实现过程
+
+1. 求每一个训练批次数据的<font color=red size=4>**均值**</font>
+2. 求每一个训练批次数据的<font color=red size=4>**方差**</font>
+3. 数据进行标准化
+4. 训练参数<font color=red size=4>**Y，B**</font>
+5. 输出y通过Y与B的线性变换得到原来的数值
+
+- 在训练的正向传播中，不会改变当前输出，只记录下Y，B。
+- 在反向传播的时候，根据求得的Y，B通过链式求导方式，求出学习速率以至改变权值。
+
+#### 8）批标准化的使用位置
+
+- model.train()
+- model.eval()
+- 训练模式：将<font color=blue size=4>**使用当前批输入的均值和方差**</font>>对其输入进行标准化。
+- 推理模式：将<font color=blue size=4>**使用在训练期间学习的移动统计数据的均值和方差**</font>>来标准化其输入。
+- 原始论文在CNN中一般应作用与非线性激活函数之前，但是，实际上放在激活函数之后效果可能更好。
+
+### 8.7 四种天气图片分类 批标准化 BN层
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import numpy as np
+import matplotlib.pyplot as plt
+%matplotlib inline
+import torchvision
+import os
+import shutil
+
+# 创建目录
+base_dir = r'./dataset/4weather'					# 创建数据集基本目录
+train_dir = os.path.join(base_dir, 'train')			# 在数据集基本目录创建训练集目录
+test_dir = os.path.join(base_dir, 'test')			# 在数据集基本目录创建测试集目录
+
+from torchvision import datasets, transforms
+
+# 创建数据集对象——tranform、train_ds、test_ds
+transform = transforms.Compose([
+    transforms.Resize((96, 96)),					# 将输入的图像调整为大小为 96x96	
+    transforms.ToTensor(),							# 将调整尺寸后的图像转换为 PyTorch 的张量（tensor）
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],		# 对图像进行标准化处理，以便将像素值范围缩放到 -1 到 1 之间。
+                         std=[0.5, 0.5, 0.5])		# 它从每个通道（红色、绿色和蓝色）中减去均值（0.5）并将结果除以标准差（0.5）
+])													# 助于提高模型的训练稳定性和性能，因为它有助于确保输入数据的分布类似于标准正态分布。
+train_ds = torchvision.datasets.ImageFolder(		# 使用 PyTorch 的 ImageFolder 数据集类来创建一个数据集对象
+    train_dir, 										# 包含训练图像数据的文件夹路径
+    transform=transform								# 使用了之前定义的 transform 对象
+)
+test_ds = torchvision.datasets.ImageFolder(
+    test_dir, 										# 包含测试图像数据的文件夹路径
+    transform=transform
+)
+
+# 创建加载器——train_dl、test_dl
+BATCHSIZE = 16										# 批量大小被设置为 16，意味着每次加载 16 个样本进行训练或测试
+train_dl = torch.utils.data.DataLoader(				# 创建了一个训练数据加载器 train_dl。
+    train_ds,
+    batch_size=BATCHSIZE,
+    shuffle=True									# 这个参数指示数据加载器在每个训练周期（epoch）开始时是否对训练数据进行洗牌（随机打乱顺序）
+)													# 随机化数据的顺序可以帮助模型更好地学习。							
+test_dl = torch.utils.data.DataLoader(
+    test_ds,
+    batch_size=BATCHSIZE
+)
+
+####################################################
+# 创建模型（添加BN层——在卷积层和全链接层都添加一个BN）
+###################################################
+
+class Net(nn.Module):                       		# 创建模型
+    def __init__(self):                      		# 对所有层进行初始化定义
+        super(Net, self).__init__()          		# 继承所有父类属性
+        self.conv1 = nn.Conv2d(3, 16, 3)     		# 定义第一个卷积层
+        self.bn1 = nn.BatchNorm2d(16)               # 定义第一个BN层——参数看卷积层的输出
+        self.conv2 = nn.Conv2d(16, 32, 3)    		# 定义第二个卷积层
+        self.bn2 = nn.BatchNorm2d(32)               # 定义第二个BN层——参数看卷积层的输出
+        self.conv3 = nn.Conv2d(32, 64, 3)    		# 定义第三个卷积层
+        self.bn3 = nn.BatchNorm2d(64)               # 定义第三个BN层——参数看卷积层的输出
+        self.drop = nn.Dropout(0.5)                 # 随机丢弃0.5的数据
+        self.pool = nn.MaxPool2d(2, 2)       		# 定义池化层
+        self.fc1 = nn.Linear(64*10*10, 1024) 		# 定义全连接层（卷积层之后的图像大小需要计算）
+        self.bn_f1 = nn.BatchNorm1d(1024)           # 定义第一个全链接的BN层——参数看卷积层的输出
+        self.fc2 = nn.Linear(1024, 256)        		# 定义全连接层
+        self.bn_f2 = nn.BatchNorm1d(256)            # 定义第二个全链接的BN层——参数看卷积层的输出
+        self.fc3 = nn.Linear(256, 4)                # 定义全连接层（最后输出为：4（4个分类））
+
+    def forward(self, x):                   		# 定义调用前向传播过程
+        x = self.pool(F.relu(self.conv1(x)))        # 第一个池化、激活、卷积层
+        x = self.bn1(x)
+        x = self.pool(F.relu(self.conv2(x)))  		# 第二个激活卷积层
+        x = self.bn2(x)
+        x = self.pool(F.relu(self.conv3(x)))        # 第三个激活卷积层
+        x = self.bn3(x)
+        x = x.view(-1, 64*10*10)
+        x = F.relu(self.fc1(x))              		# 第四个激活全链接层
+        x = self.bn_f1(x)
+        x = self.drop(x)                            # 在全链接层增加一个Dropout层
+        x = F.relu(self.fc2(x))              		# 第五个激活全链接层
+        x = self.bn_f2(x)
+        x = self.drop(x)                            # 在全链接层增加一个Dropout层
+        x = self.fc3(x)                      		# 最后一个全链接层
+        return x
+
+model = Net()
+if torch.cuda.is_available():
+    model.to('cuda')
+
+def fit(epoch, model, trainloader, testloader):
+    # 训练模型
+    correct = 0													# 新建正确个数变量
+    total = 0													# 新建总的个数变量
+    running_loss = 0											# 新建loss个数变量
+    model.train()                                               # 将模型设为训练模式，Dropout发挥作用
+    for x, y in trainloader:
+        if torch.cuda.is_available():
+            x, y = x.to('cuda'), y.to('cuda')
+        y_pred = model(x)
+        loss = loss_fn(y_pred, y)
+        optim.zero_grad()
+        loss.backward()
+        optim.step()
+        with torch.no_grad():
+            y_pred = torch.argmax(y_pred, dim=1)				# 记录预测值
+            correct += (y_pred == y).sum().item()				# 计算正确个数
+            total += y.size(0)									# 计算总的个数（y.size(0)：y真实值，size(0):运行样本个数）
+            running_loss += loss.item()							# 计算loss个数
+    # 求解每个样本的loss和acc        
+    epoch_loss = running_loss / len(trainloader.dataset)		# 求解每个样本的loss
+    epoch_acc = correct / total									# 求解每个样本的正确率
+    
+    
+    # 验证测试
+    test_correct = 0
+    test_total = 0
+    test_running_loss = 0
+    model.eval()                                                 # 将模型设为预测模式，Dropout不发挥作用
+    with torch.no_grad():
+        for  x, y in testloader:
+            if torch.cuda.is_available():
+                x, y = x.to('cuda'), y.to('cuda')
+            y_pred = model(x)
+            loss = loss_fn(y_pred, y)
+            y_pred = torch.argmax(y_pred, dim=1)
+            test_correct += (y_pred == y).sum().item()
+            test_total += y.size(0)
+            test_running_loss += loss.item()
+    # 求解test的loss和acc         
+    epoch_test_loss = test_running_loss / len(testloader.dataset)
+    epoch_test_acc = test_correct / test_total
+        
+    print('epoch:', epoch, 
+          'loss:', round(epoch_loss, 3),
+          'accuracy:', round(epoch_acc, 3),
+          'test_loss:', round(epoch_test_loss, 3),
+          'test_accuracy:', round(epoch_test_acc, 3)
+         )
+        
+    return epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc
+
+# 参数设定
+epochs = 30
+loss_fn = nn.CrossEntropyLoss()
+optim = torch.optim.Adam(model.parameters(), lr=0.001)
+
+# 记录训练集和测试集的loss和acc
+train_loss = []
+train_acc = []
+test_loss = []
+test_acc = []
+# 开始训练
+for epoch in range(epochs):
+    epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc = fit(epoch,
+                                                                 model,
+                                                                 train_dl,
+                                                                 test_dl)
+    train_loss.append(epoch_loss)
+    train_acc.append(epoch_acc)
+    test_loss.append(epoch_test_loss)
+    test_acc.append(epoch_test_acc)
+    
+# 绘图
+plt.plot(range(1, epochs+1), train_acc, label='train_acc')
+plt.plot(range(1,epochs+1), test_acc, label='test_acc')
+plt.legend()
+
+plt.plot(range(1, epochs+1), train_loss, label='train_loss')
+plt.plot(range(1,epochs+1), test_loss, label='test_loss')
+plt.legend()
+```
+
+修改后的模型训练结果如下图：
+
+![image-20230918163209594](https://raw.githubusercontent.com/Noregret327/picture/master/202309181632663.png)
+
+### 8.8 超参数选择
+
+#### 1）网络容量：
+
+可以认为与<font color=blue size=4>网络中的可训练参数</font>成正比
+
+#### 2）什么是超参数
+
+所谓超参数，就是搭建神经网络中，需要我们自己选择的参数（不是通过梯度下降算法去优化的参数），比如：中间层的神经元个数、学习速率
+
+#### 3）提高网络的拟合能力
+
+最简单直接的方法是：
+
+1. 增加层——这个更好
+2. 增加隐藏神经元个数——这个效果没那么明显
+
+这两个方法哪种更好：单纯增加神经元个数对于网络性能的提升并不明显，增加层会大大提高网络的拟合能力，这也是为什么现在深度学习的层越来越深的原因。<font color=red size=4>单层的神经元个数，不能太小，太小的话会造成信息瓶颈，使得模型欠拟合。</font>
+
+#### 4）参数选择原则
+
+<font color=red size=4>首先开发一个过拟合的模型：</font>
+
+1. 添加更多的层
+2. 让每一层变得更大
+3. 训练更多的轮次
+
+<font color=red size=4>然后抑制过拟合：</font>
+
+1. dropout
+2. 正则化
+3. 图像增强
+
+<font color=red size=4>再次调节超参数：</font>
+
+- 学习速率
+- 隐藏层单元数
+- 训练轮次
+
+<font color=red size=4>**总的原则：保证神经网络容量足够拟合数据！**</font>
+
+<font color=blue size=4>！！！构建网络的总原则！！！：</font>
+
+1. 增大网络容量，直到过拟合
+2. 采取措施抑制过拟合
+3. 继续增大网络容量，直到过拟合
+
+
+
+## 9.预训练模型（迁移学习）
+
+预训练网络是一个保存好的、之前已经在大型数据集（大规模图像分类任务）上训练好的卷积神经网络。
+
+如果模型足够大，那么这个模型能够有效的提取实际特征的模型。即使新问题和新任务与原始任务完全不同，学习到的特征在不同问题之间是可移植的。——针对小数据问题也非常有效
+
+### 9.1 pytorch内置预训练网络
+
+Pytorch库包含模型框架有：
+
+- VGG16
+- VGG19
+- densenet
+- ResNet
+- mobilenet
+- Inception V3
+- Xception
+
+**关于 ImageNet：**
+
+ImageNet是一个手动标注好类别的图片数据库，目前已有22 000个类别。——为了机器视觉研究
+
+ILSVRC比赛：是一个视觉识别比赛，这个图片分类比赛是训练一个模型，能够将输入图片正确分类到1000个类别中的某个类别。训练集120万、验证集5万、测试集10万。1000个图片类别是我们日常中遇到的，如狗、猫、各种家具物品、车辆类型等。
+
+### 9.2 预训练模型——VGG16
+
+1.修改输入图片的大小：（192，192）——防止后面的网络比核还小
+
+```python
+transform = transforms.Compose([
+    transforms.Resize((192, 192)),					# 将输入的图像调整为大小为 192 x 192	
+    transforms.ToTensor(),							# 将调整尺寸后的图像转换为 PyTorch 的张量（tensor）
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],		# 对图像进行标准化处理，以便将像素值范围缩放到 -1 到 1 之间。
+                         std=[0.5, 0.5, 0.5])		# 它从每个通道（红色、绿色和蓝色）中减去均值（0.5）并将结果除以标准差（0.5）
+])
+```
+
+2.把自己定义手写的 model 从 torchvision 导入
+
+```python
+model = torchvision.models.vgg16(pretrained=True)
+# 运行下载vgg16权重模型，可以提前下载模型（vgg16.pth）放在下载的路径里
+```
+
+3.冻结参数
+
+- **迁移学习（Transfer Learning）**：在某些情况下，你可能希望利用预训练的模型来解决新的任务，而不是从头开始训练一个全新的模型。预训练的模型通常在大规模数据上进行了训练，学到了丰富的特征表示。然后，你可以将这个模型的部分或全部层次用于新任务，但不希望改变这些层次的参数。
+- **避免权重更新**：通过将模型的参数的 `requires_grad` 设置为 `False`，你告诉 PyTorch 不要对这些参数进行梯度更新。这可以防止这些参数在训练中被误更新，从而保持了预训练模型的特征提取部分不变。
+- **节省计算资源**：冻结不需要更新的参数可以减少计算和内存开销。在迁移学习中，通常只需微调模型的一部分，所以只有一部分参数需要梯度更新。
+
+```python
+for p in model.features.parameters():
+    p.requires_grad = False
+
+# 将一个 PyTorch 模型中的 requires_grad 设置为 False，从而冻结这些参数，防止它们在后续的训练中被更新。这种操作通常用于迁移学习或特定的模型微调场景。
+```
+
+4.修改模型的输出参数
+
+因为天气输出只有四种结果，所以特征输出改为4
+
+```python
+model.classifier[-1].out_features = 4
+# 优化函数也跟着修改
+optim = torch.optim.Adam(model.classifier.parameters(), lr=0.0001)
+```
+
+#### 完整代码
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import numpy as np
+import matplotlib.pyplot as plt
+%matplotlib inline
+import torchvision
+from torchvision import datasets, transforms
+import os
+
+# 创建目录
+base_dir = r'./dataset/4weather'					# 创建数据集基本目录
+train_dir = os.path.join(base_dir, 'train')			# 在数据集基本目录创建训练集目录
+test_dir = os.path.join(base_dir, 'test')			# 在数据集基本目录创建测试集目录
+
+# 创建数据集对象——tranform、train_ds、test_ds
+transform = transforms.Compose([
+    transforms.Resize((192, 192)),					# 将输入的图像调整为大小为 192x192	
+    transforms.ToTensor(),							# 将调整尺寸后的图像转换为 PyTorch 的张量（tensor）
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],		# 对图像进行标准化处理，以便将像素值范围缩放到 -1 到 1 之间。
+                         std=[0.5, 0.5, 0.5])		# 它从每个通道（红色、绿色和蓝色）中减去均值（0.5）并将结果除以标准差（0.5）
+])													# 助于提高模型的训练稳定性和性能，因为它有助于确保输入数据的分布类似于标准正态分布。
+train_ds = torchvision.datasets.ImageFolder(		# 使用 PyTorch 的 ImageFolder 数据集类来创建一个数据集对象
+    train_dir, 										# 包含训练图像数据的文件夹路径
+    transform=transform								# 使用了之前定义的 transform 对象
+)
+test_ds = torchvision.datasets.ImageFolder(
+    test_dir, 										# 包含测试图像数据的文件夹路径
+    transform=transform
+)
+
+# 创建加载器——train_dl、test_dl
+BATCHSIZE = 16										# 批量大小被设置为 16，意味着每次加载 16 个样本进行训练或测试
+train_dl = torch.utils.data.DataLoader(				# 创建了一个训练数据加载器 train_dl。
+    train_ds,
+    batch_size=BATCHSIZE,
+    shuffle=True									# 这个参数指示数据加载器在每个训练周期（epoch）开始时是否对训练数据进行洗牌（随机打乱顺序）
+)													# 随机化数据的顺序可以帮助模型更好地学习。							
+test_dl = torch.utils.data.DataLoader(
+    test_ds,
+    batch_size=BATCHSIZE
+)
+
+# 模型加载
+model = torchvision.models.vgg16(pretrained=True)
+
+# 修改模型参数
+# 冻结参数
+for p in model.features.parameters():
+    p.requires_grad = False
+    
+model.classifier[-1].out_features = 4 				# 修改模型输出
+##################### 优化函数也要跟着修改 #####################
+optim = torch.optim.Adam(model.classifier.parameters(), lr=0.0001)
+loss_fn = nn.CrossEntropyLoss()
+
+
+def fit(epoch, model, trainloader, testloader):
+    # 训练模型
+    correct = 0													# 新建正确个数变量
+    total = 0													# 新建总的个数变量
+    running_loss = 0											# 新建loss个数变量
+    model.train()                                               # 将模型设为训练模式，Dropout发挥作用
+    for x, y in trainloader:
+        if torch.cuda.is_available():
+            x, y = x.to('cuda'), y.to('cuda')
+        y_pred = model(x)
+        loss = loss_fn(y_pred, y)
+        optim.zero_grad()
+        loss.backward()
+        optim.step()
+        with torch.no_grad():
+            y_pred = torch.argmax(y_pred, dim=1)				# 记录预测值
+            correct += (y_pred == y).sum().item()				# 计算正确个数
+            total += y.size(0)									# 计算总的个数（y.size(0)：y真实值，size(0):运行样本个数）
+            running_loss += loss.item()							# 计算loss个数
+    # 求解每个样本的loss和acc        
+    epoch_loss = running_loss / len(trainloader.dataset)		# 求解每个样本的loss
+    epoch_acc = correct / total									# 求解每个样本的正确率
+    
+    
+    # 验证测试
+    test_correct = 0
+    test_total = 0
+    test_running_loss = 0
+    model.eval()                                                 # 将模型设为预测模式，Dropout不发挥作用
+    with torch.no_grad():
+        for  x, y in testloader:
+            if torch.cuda.is_available():
+                x, y = x.to('cuda'), y.to('cuda')
+            y_pred = model(x)
+            loss = loss_fn(y_pred, y)
+            y_pred = torch.argmax(y_pred, dim=1)
+            test_correct += (y_pred == y).sum().item()
+            test_total += y.size(0)
+            test_running_loss += loss.item()
+    # 求解test的loss和acc         
+    epoch_test_loss = test_running_loss / len(testloader.dataset)
+    epoch_test_acc = test_correct / test_total
+        
+    print('epoch:', epoch, 
+          'loss:', round(epoch_loss, 3),
+          'accuracy:', round(epoch_acc, 3),
+          'test_loss:', round(epoch_test_loss, 3),
+          'test_accuracy:', round(epoch_test_acc, 3)
+         )
+        
+    return epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc
+
+# 设置训练次数
+epochs = 10
+# 记录训练集和测试集的loss和acc
+train_loss = []
+train_acc = []
+test_loss = []
+test_acc = []
+# 开始训练
+for epoch in range(epochs):
+    epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc = fit(epoch,
+                                                                 model,
+                                                                 train_dl,
+                                                                 test_dl)
+    train_loss.append(epoch_loss)
+    train_acc.append(epoch_acc)
+    test_loss.append(epoch_test_loss)
+    test_acc.append(epoch_test_acc)
+   
+# 绘图
+plt.plot(range(1, epochs+1), train_acc, label='train_acc')
+plt.plot(range(1,epochs+1), test_acc, label='test_acc')
+plt.legend()
+
+plt.plot(range(1, epochs+1), train_loss, label='train_loss')
+plt.plot(range(1,epochs+1), test_loss, label='test_loss')
+plt.legend()
+```
+
+输出结果：
+
+![image-20230918210348957](https://raw.githubusercontent.com/Noregret327/picture/master/202309182103027.png)
+
+### 9.3 数据增强
+
+数据增强方法主要是：人为的对图片进行变换、缩放、裁剪、翻转等
+
+```python
+# 常用的数据增强模型：
+# 对位置方面处理
+transforms.RandomCrop                                 # 随机位置裁剪
+transforms.CenterCrop                                 # 中间位置裁剪
+transforms.RandomHorizontalFlip                       # 随机水平翻转
+transforms.RandomVerticalFlip                         # 随机上下翻转
+transforms.RandomRotation                             # 随机旋转一个角度
+
+# 对颜色方面处理
+transforms.ColorJitter(brightness=1)                  # 明亮度调整 
+transforms.ColorJitter(contrast=1)                    # 对比度
+transforms.ColorJitter(saturation=0.5)                # 饱和度
+transforms.ColorJitter(hue=0.5)                       # 颜色
+ransforms.RandomGrayscale(p=0.5)                      # 随机灰度化
+```
+
+1.对训练集的数据进行处理，测试集的保持不变
+
+```python
+# 创建数据集对象——tranform、train_ds、test_ds
+train_transform = transforms.Compose([
+    transforms.Resize(224),                                # 裁剪最大值为224图片
+    transforms.RandomCrop(192),                            # 随机裁剪
+    transforms.RandomHorizontalFlip(),                     # 随机翻转
+    transforms.RandomRotation(0.2),                        # 随机旋转
+    transforms.ColorJitter(brightness=0.5),                # 添加明亮度
+    transforms.ColorJitter(contrast=1),                    # 添加对比度
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                         std=[0.5, 0.5, 0.5])
+])
+test_transform = transforms.Compose([
+    transforms.Resize((192, 192)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                         std=[0.5, 0.5, 0.5])
+])
+# 加载数据集
+train_ds = torchvision.datasets.ImageFolder(
+    train_dir,
+    transform=train_transform
+)
+test_ds = torchvision.datasets.ImageFolder(
+    test_dir, 
+    transform=test_transform
+)
+```
+
+#### 完整代码
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import numpy as np
+import matplotlib.pyplot as plt
+%matplotlib inline
+import torchvision
+import os
+from torchvision import datasets, transforms
+
+# 创建目录
+base_dir = r'./dataset/4weather'					# 创建数据集基本目录
+train_dir = os.path.join(base_dir, 'train')			# 在数据集基本目录创建训练集目录
+test_dir = os.path.join(base_dir, 'test')			# 在数据集基本目录创建测试集目录
+
+# 创建数据集对象——tranform、train_ds、test_ds
+train_transform = transforms.Compose([
+    transforms.Resize(224),                                # 裁剪最大值为224图片
+    transforms.RandomCrop(192),                            # 随机裁剪
+    transforms.RandomHorizontalFlip(),                     # 随机翻转
+    transforms.RandomRotation(0.2),                        # 随机旋转
+    transforms.ColorJitter(brightness=0.5),                # 添加明亮度
+    transforms.ColorJitter(contrast=1),                    # 添加对比度
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                         std=[0.5, 0.5, 0.5])
+])
+test_transform = transforms.Compose([
+    transforms.Resize((192, 192)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                         std=[0.5, 0.5, 0.5])
+])
+
+train_ds = torchvision.datasets.ImageFolder(
+    train_dir,
+    transform=train_transform
+)
+test_ds = torchvision.datasets.ImageFolder(
+    test_dir, 
+    transform=test_transform
+)
+
+# 创建加载器——train_dl、test_dl
+BATCHSIZE = 16										# 批量大小被设置为 16，意味着每次加载 16 个样本进行训练或测试
+train_dl = torch.utils.data.DataLoader(				# 创建了一个训练数据加载器 train_dl。
+    train_ds,
+    batch_size=BATCHSIZE,
+    shuffle=True									# 这个参数指示数据加载器在每个训练周期（epoch）开始时是否对训练数据进行洗牌（随机打乱顺序）
+)													# 随机化数据的顺序可以帮助模型更好地学习。							
+test_dl = torch.utils.data.DataLoader(
+    test_ds,
+    batch_size=BATCHSIZE
+)
+
+# 加载模型
+model = torchvision.models.vgg16(pretrained=True)
+
+# 修改模型
+for p in model.features.parameters():
+    p.requires_grad = False
+model.classifier[-1].out_features = 4
+optim = torch.optim.Adam(model.classifier.parameters(), lr=0.0001)
+loss_fn = nn.CrossEntropyLoss()
+
+def fit(epoch, model, trainloader, testloader):
+    # 训练模型
+    correct = 0													# 新建正确个数变量
+    total = 0													# 新建总的个数变量
+    running_loss = 0											# 新建loss个数变量
+    model.train()                                               # 将模型设为训练模式，Dropout发挥作用
+    for x, y in trainloader:
+        if torch.cuda.is_available():
+            x, y = x.to('cuda'), y.to('cuda')
+        y_pred = model(x)
+        loss = loss_fn(y_pred, y)
+        optim.zero_grad()
+        loss.backward()
+        optim.step()
+        with torch.no_grad():
+            y_pred = torch.argmax(y_pred, dim=1)				# 记录预测值
+            correct += (y_pred == y).sum().item()				# 计算正确个数
+            total += y.size(0)									# 计算总的个数（y.size(0)：y真实值，size(0):运行样本个数）
+            running_loss += loss.item()							# 计算loss个数
+    # 求解每个样本的loss和acc        
+    epoch_loss = running_loss / len(trainloader.dataset)		# 求解每个样本的loss
+    epoch_acc = correct / total									# 求解每个样本的正确率
+    
+    
+    # 验证测试
+    test_correct = 0
+    test_total = 0
+    test_running_loss = 0
+    model.eval()                                                 # 将模型设为预测模式，Dropout不发挥作用
+    with torch.no_grad():
+        for  x, y in testloader:
+            if torch.cuda.is_available():
+                x, y = x.to('cuda'), y.to('cuda')
+            y_pred = model(x)
+            loss = loss_fn(y_pred, y)
+            y_pred = torch.argmax(y_pred, dim=1)
+            test_correct += (y_pred == y).sum().item()
+            test_total += y.size(0)
+            test_running_loss += loss.item()
+    # 求解test的loss和acc         
+    epoch_test_loss = test_running_loss / len(testloader.dataset)
+    epoch_test_acc = test_correct / test_total
+        
+    print('epoch:', epoch, 
+          'loss:', round(epoch_loss, 3),
+          'accuracy:', round(epoch_acc, 3),
+          'test_loss:', round(epoch_test_loss, 3),
+          'test_accuracy:', round(epoch_test_acc, 3)
+         )
+        
+    return epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc
+    
+epochs = 10
+# 记录训练集和测试集的loss和acc
+train_loss = []
+train_acc = []
+test_loss = []
+test_acc = []
+# 开始训练
+for epoch in range(epochs):
+    epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc = fit(epoch,
+                                                                 model,
+                                                                 train_dl,
+                                                                 test_dl)
+    train_loss.append(epoch_loss)
+    train_acc.append(epoch_acc)
+    test_loss.append(epoch_test_loss)
+    test_acc.append(epoch_test_acc)
+   
+# 绘图   
+plt.plot(range(1, epochs+1), train_acc, label='train_acc')
+plt.plot(range(1,epochs+1), test_acc, label='test_acc')
+plt.legend()
+
+plt.plot(range(1, epochs+1), train_loss, label='train_loss')
+plt.plot(range(1,epochs+1), test_loss, label='test_loss')
+plt.legend()    
+```
+
+输出：
+
+![image-20230918211438158](C:/Users/14224/AppData/Roaming/Typora/typora-user-images/image-20230918211438158.png)
+
+
+
+### 9.4 学习速率衰减
+
+1.手写数据学习速率衰减方法
+
+```python
+# 手写数据衰减方法
+for p in optim.param_groups:
+    p['lr'] *= 0.9
+```
+
+2.学习速率衰减导入
+
+```python
+from torch.optim import lr_scheduler
+
+exp_lr_scheduler = lr_scheduler.StepLR(optim, step_size=5, gamma=0.1)
+
+# # 一些常用的学习速率衰减
+# lr_scheduler.StepLR(optim, step_size=5, gamma=0.1)
+# lr_scheduler.MultiStepLR(optim, [20, 50, 80], gamma=0.1)
+# lr_scheduler.ExponentialLR(optim, gamma=0.1)
+```
+
+3.训练方式的修改
+
+```python
+def fit(epoch, model, trainloader, testloader):
+    # 训练模型
+    correct = 0													# 新建正确个数变量
+    total = 0													# 新建总的个数变量
+    running_loss = 0											# 新建loss个数变量
+    model.train()                                               # 将模型设为训练模式，Dropout发挥作用
+    for x, y in trainloader:
+        if torch.cuda.is_available():
+            x, y = x.to('cuda'), y.to('cuda')
+        y_pred = model(x)
+        loss = loss_fn(y_pred, y)
+        optim.zero_grad()
+        loss.backward()
+        optim.step()
+        with torch.no_grad():
+            y_pred = torch.argmax(y_pred, dim=1)				# 记录预测值
+            correct += (y_pred == y).sum().item()				# 计算正确个数
+            total += y.size(0)									# 计算总的个数（y.size(0)：y真实值，size(0):运行样本个数）
+            running_loss += loss.item()							# 计算loss个数
+    
+    # /////////////////////////////增加一步对学习速率衰减//////////////////////
+    exp_lr_scheduler.step()
+    //////////////////////////////////////////////////////////////////////
+    # 求解每个样本的loss和acc        
+    epoch_loss = running_loss / len(trainloader.dataset)		# 求解每个样本的loss
+    epoch_acc = correct / total									# 求解每个样本的正确率
+    
+    
+    # 验证测试
+    test_correct = 0
+    test_total = 0
+    test_running_loss = 0
+    model.eval()                                                 # 将模型设为预测模式，Dropout不发挥作用
+    with torch.no_grad():
+        for  x, y in testloader:
+            if torch.cuda.is_available():
+                x, y = x.to('cuda'), y.to('cuda')
+            y_pred = model(x)
+            loss = loss_fn(y_pred, y)
+            y_pred = torch.argmax(y_pred, dim=1)
+            test_correct += (y_pred == y).sum().item()
+            test_total += y.size(0)
+            test_running_loss += loss.item()
+    # 求解test的loss和acc         
+    epoch_test_loss = test_running_loss / len(testloader.dataset)
+    epoch_test_acc = test_correct / test_total
+        
+    print('epoch:', epoch, 
+          'loss:', round(epoch_loss, 3),
+          'accuracy:', round(epoch_acc, 3),
+          'test_loss:', round(epoch_test_loss, 3),
+          'test_accuracy:', round(epoch_test_acc, 3)
+         )
+        
+    return epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc
+```
+
+#### 完整代码
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import numpy as np
+import matplotlib.pyplot as plt
+%matplotlib inline
+import torchvision
+import os
+from torchvision import datasets, transforms
+
+# 创建目录
+base_dir = r'./dataset/4weather'					# 创建数据集基本目录
+train_dir = os.path.join(base_dir, 'train')			# 在数据集基本目录创建训练集目录
+test_dir = os.path.join(base_dir, 'test')			# 在数据集基本目录创建测试集目录
+
+# 创建数据集对象——tranform、train_ds、test_ds
+train_transform = transforms.Compose([
+    transforms.Resize(224),                                # 裁剪最大值为224图片
+    transforms.RandomCrop(192),                            # 随机裁剪
+    transforms.RandomHorizontalFlip(),                     # 随机翻转
+    transforms.RandomRotation(0.2),                        # 随机旋转
+    transforms.ColorJitter(brightness=0.5),                # 添加明亮度
+    transforms.ColorJitter(contrast=1),                    # 添加对比度
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                         std=[0.5, 0.5, 0.5])
+])
+test_transform = transforms.Compose([
+    transforms.Resize((192, 192)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                         std=[0.5, 0.5, 0.5])
+])
+
+train_ds = torchvision.datasets.ImageFolder(
+    train_dir,
+    transform=train_transform
+)
+test_ds = torchvision.datasets.ImageFolder(
+    test_dir, 
+    transform=test_transform
+)
+
+# 创建加载器——train_dl、test_dl
+BATCHSIZE = 16										# 批量大小被设置为 16，意味着每次加载 16 个样本进行训练或测试
+train_dl = torch.utils.data.DataLoader(				# 创建了一个训练数据加载器 train_dl。
+    train_ds,
+    batch_size=BATCHSIZE,
+    shuffle=True									# 这个参数指示数据加载器在每个训练周期（epoch）开始时是否对训练数据进行洗牌（随机打乱顺序）
+)													# 随机化数据的顺序可以帮助模型更好地学习。							
+test_dl = torch.utils.data.DataLoader(
+    test_ds,
+    batch_size=BATCHSIZE
+)
+
+# 加载模型
+model = torchvision.models.vgg16(pretrained=True)
+# 冻结参数
+for p in model.features.parameters():
+    p.requires_grad = False
+# 模型参数修改
+model.classifier[-1].out_features = 4
+optim = torch.optim.Adam(model.classifier.parameters(), lr=0.0001)
+loss_fn = nn.CrossEntropyLoss()
+
+########### 导入学习速率衰减 #############
+from torch.optim import lr_scheduler
+exp_lr_scheduler = lr_scheduler.StepLR(optim, step_size=5, gamma=0.1)
+
+# 定义训练
+def fit(epoch, model, trainloader, testloader):
+    # 训练模型
+    correct = 0													# 新建正确个数变量
+    total = 0													# 新建总的个数变量
+    running_loss = 0											# 新建loss个数变量
+    model.train()                                               # 将模型设为训练模式，Dropout发挥作用
+    for x, y in trainloader:
+        if torch.cuda.is_available():
+            x, y = x.to('cuda'), y.to('cuda')
+        y_pred = model(x)
+        loss = loss_fn(y_pred, y)
+        optim.zero_grad()
+        loss.backward()
+        optim.step()
+        with torch.no_grad():
+            y_pred = torch.argmax(y_pred, dim=1)				# 记录预测值
+            correct += (y_pred == y).sum().item()				# 计算正确个数
+            total += y.size(0)									# 计算总的个数（y.size(0)：y真实值，size(0):运行样本个数）
+            running_loss += loss.item()							# 计算loss个数
+    
+    # /////////////////////////////增加一步对学习速率衰减//////////////////////
+    exp_lr_scheduler.step()
+    //////////////////////////////////////////////////////////////////////
+    # 求解每个样本的loss和acc        
+    epoch_loss = running_loss / len(trainloader.dataset)		# 求解每个样本的loss
+    epoch_acc = correct / total									# 求解每个样本的正确率
+    
+    
+    # 验证测试
+    test_correct = 0
+    test_total = 0
+    test_running_loss = 0
+    model.eval()                                                 # 将模型设为预测模式，Dropout不发挥作用
+    with torch.no_grad():
+        for  x, y in testloader:
+            if torch.cuda.is_available():
+                x, y = x.to('cuda'), y.to('cuda')
+            y_pred = model(x)
+            loss = loss_fn(y_pred, y)
+            y_pred = torch.argmax(y_pred, dim=1)
+            test_correct += (y_pred == y).sum().item()
+            test_total += y.size(0)
+            test_running_loss += loss.item()
+    # 求解test的loss和acc         
+    epoch_test_loss = test_running_loss / len(testloader.dataset)
+    epoch_test_acc = test_correct / test_total
+        
+    print('epoch:', epoch, 
+          'loss:', round(epoch_loss, 3),
+          'accuracy:', round(epoch_acc, 3),
+          'test_loss:', round(epoch_test_loss, 3),
+          'test_accuracy:', round(epoch_test_acc, 3)
+         )
+        
+    return epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc
+
+# 训练次数
+epochs = 10
+# 记录训练集和测试集的loss和acc
+train_loss = []
+train_acc = []
+test_loss = []
+test_acc = []
+# 开始训练
+for epoch in range(epochs):
+    epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc = fit(epoch,
+                                                                 model,
+                                                                 train_dl,
+                                                                 test_dl)
+    train_loss.append(epoch_loss)
+    train_acc.append(epoch_acc)
+    test_loss.append(epoch_test_loss)
+    test_acc.append(epoch_test_acc)
+
+# 绘图
+plt.plot(range(1, epochs+1), train_acc, label='train_acc')
+plt.plot(range(1,epochs+1), test_acc, label='test_acc')
+plt.legend()
+
+plt.plot(range(1, epochs+1), train_loss, label='train_loss')
+plt.plot(range(1,epochs+1), test_loss, label='test_loss')
+plt.legend()
+```
+
+输出：
+
+![image-20230918211517106](C:/Users/14224/AppData/Roaming/Typora/typora-user-images/image-20230918211517106.png)
+
+
+
+### 9.5 预训练网络——ResNet
+
+1.导入模型
+
+```python
+model = torchvision.models.resnet18(pretrained=True)
+```
+
+2.修改模型
+
+```python
+# 冻结参数
+for param in model.parameters():
+    param.requires_grad = False
+
+# 提取最后一层
+in_f = model.fc.in_features
+model.fc = nn.Linear(in_f, 4)          # 将ResNet网络最后一层替换掉
+
+# 修改优化函数
+optim = torch.optim.Adam(model.fc.parameters(), lr=0.0001)
+```
+
+#### 完整代码
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import numpy as np
+import matplotlib.pyplot as plt
+%matplotlib inline
+import torchvision
+import os
+from torchvision import datasets, transforms
+
+# 创建目录
+base_dir = r'./dataset/4weather'					# 创建数据集基本目录
+train_dir = os.path.join(base_dir, 'train')			# 在数据集基本目录创建训练集目录
+test_dir = os.path.join(base_dir, 'test')			# 在数据集基本目录创建测试集目录
+
+# 创建数据集对象——tranform、train_ds、test_ds
+train_transform = transforms.Compose([
+    transforms.Resize(224),                                # 裁剪最大值为224图片
+    transforms.RandomCrop(192),                            # 随机裁剪
+    transforms.RandomHorizontalFlip(),                     # 随机翻转
+    transforms.RandomRotation(0.2),                        # 随机旋转
+    transforms.ColorJitter(brightness=0.5),                # 添加明亮度
+    transforms.ColorJitter(contrast=1),                    # 添加对比度
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                         std=[0.5, 0.5, 0.5])
+])
+test_transform = transforms.Compose([
+    transforms.Resize((192, 192)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                         std=[0.5, 0.5, 0.5])
+])
+
+train_ds = torchvision.datasets.ImageFolder(
+    train_dir,
+    transform=train_transform
+)
+test_ds = torchvision.datasets.ImageFolder(
+    test_dir, 
+    transform=test_transform
+)
+
+# 创建加载器——train_dl、test_dl
+BATCHSIZE = 32										# 批量大小被设置为 32，意味着每次加载 32 个样本进行训练或测试
+train_dl = torch.utils.data.DataLoader(				# 创建了一个训练数据加载器 train_dl。
+    train_ds,
+    batch_size=BATCHSIZE,
+    shuffle=True									# 这个参数指示数据加载器在每个训练周期（epoch）开始时是否对训练数据进行洗牌（随机打乱顺序）
+)													# 随机化数据的顺序可以帮助模型更好地学习。							
+test_dl = torch.utils.data.DataLoader(
+    test_ds,
+    batch_size=BATCHSIZE
+)
+
+# 加载模型
+model = torchvision.models.resnet18(pretrained=True)
+# 修改模型参数
+for param in model.parameters():
+    param.requires_grad = False
+# 提取模型最后一层
+in_f = model.fc.in_features    
+model.fc = nn.Linear(in_f, 4)          # 将ResNet网络最后一层替换掉
+
+# 放在GPU训练
+if torch.cuda.is_available():
+    model.to('cuda')
+    
+# 优化函数——要跟着模型修改
+optim = torch.optim.Adam(model.fc.parameters(), lr=0.0001)
+
+# 损失函数
+loss_fn = nn.CrossEntropyLoss()
+
+def fit(epoch, model, trainloader, testloader):
+    # 训练模型
+    correct = 0
+    total = 0
+    running_loss = 0
+    model.train()
+    for x, y in trainloader:
+        if torch.cuda.is_available():
+            x, y = x.to('cuda'), y.to('cuda')
+        y_pred = model(x)
+        loss = loss_fn(y_pred, y)
+        optim.zero_grad()
+        loss.backward()
+        optim.step()
+        with torch.no_grad():
+            y_pred = torch.argmax(y_pred, dim=1)
+            correct += (y_pred == y).sum().item()
+            total += y.size(0)
+            running_loss += loss.item()
+    
+    # 求解每个样本的loss和acc        
+    epoch_loss = running_loss / len(trainloader.dataset)
+    epoch_acc = correct / total
+    
+    
+    # 验证测试
+    test_correct = 0
+    test_total = 0
+    test_running_loss = 0
+    model.eval()                                           
+    with torch.no_grad():
+        for  x, y in testloader:
+            if torch.cuda.is_available():
+                x, y = x.to('cuda'), y.to('cuda')
+            y_pred = model(x)
+            loss = loss_fn(y_pred, y)
+            y_pred = torch.argmax(y_pred, dim=1)
+            test_correct += (y_pred == y).sum().item()
+            test_total += y.size(0)
+            test_running_loss += loss.item()
+    # 求解test的loss和acc         
+    epoch_test_loss = test_running_loss / len(testloader.dataset)
+    epoch_test_acc = test_correct / test_total
+        
+    print('epoch:', epoch, 
+          'loss:', round(epoch_loss, 3),
+          'accuracy:', round(epoch_acc, 3),
+          'test_loss:', round(epoch_test_loss, 3),
+          'test_accuracy:', round(epoch_test_acc, 3)
+         )
+        
+    return epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc
+
+# 训练次数
+epochs = 50
+# 记录训练集和测试集的loss和acc
+train_loss = []
+train_acc = []
+test_loss = []
+test_acc = []
+# 开始训练
+for epoch in range(epochs):
+    epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc = fit(epoch,
+                                                                 model,
+                                                                 train_dl,
+                                                                 test_dl)
+    train_loss.append(epoch_loss)
+    train_acc.append(epoch_acc)
+    test_loss.append(epoch_test_loss)
+    test_acc.append(epoch_test_acc)
+
+# 绘图
+plt.plot(range(1, epochs+1), train_acc, label='train_acc')
+plt.plot(range(1,epochs+1), test_acc, label='test_acc')
+plt.legend()
+
+plt.plot(range(1, epochs+1), train_loss, label='train_loss')
+plt.plot(range(1,epochs+1), test_loss, label='test_loss')
+plt.legend()    
+```
+
+输出：
+
+![image-20230918212508809](https://raw.githubusercontent.com/Noregret327/picture/master/202309182125873.png)
