@@ -1415,6 +1415,8 @@ plt.show()
 
 ### 8.2 手写数字分类 卷积模型
 
+#### ！！！完整代码！！！
+
 ```python
 import torch
 import torch.nn as nn
@@ -1539,6 +1541,8 @@ for epoch in range(epochs):
 ```
 
 ### 8.3 四种天气图片分类
+
+#### ！！！完整代码！！！
 
 ```python
 import torch
@@ -1785,6 +1789,8 @@ plt.legend()
 3. 类似于性别在生物进化中的角色：性别的出现可以繁衍出适应新环境的变种，有效的阻止过拟合，即避免环境改变时物种可能面临的灭绝
 
 ### 8.5 四种天气图片分类 Dropout抑制过拟合
+
+#### ！！！完整代码！！！
 
 ```python
 import torch
@@ -2041,6 +2047,8 @@ plt.legend()
 - 原始论文在CNN中一般应作用与非线性激活函数之前，但是，实际上放在激活函数之后效果可能更好。
 
 ### 8.7 四种天气图片分类 批标准化 BN层
+
+#### ！！！完整代码！！！
 
 ```python
 import torch
@@ -2334,7 +2342,7 @@ model.classifier[-1].out_features = 4
 optim = torch.optim.Adam(model.classifier.parameters(), lr=0.0001)
 ```
 
-#### 完整代码
+#### ！！！完整代码！！！
 
 ```python
 import torch
@@ -2370,7 +2378,7 @@ test_ds = torchvision.datasets.ImageFolder(
 )
 
 # 创建加载器——train_dl、test_dl
-BATCHSIZE = 16										# 批量大小被设置为 16，意味着每次加载 16 个样本进行训练或测试
+BATCHSIZE = 32										# 批量大小被设置为 32，意味着每次加载 32 个样本进行训练或测试
 train_dl = torch.utils.data.DataLoader(				# 创建了一个训练数据加载器 train_dl。
     train_ds,
     batch_size=BATCHSIZE,
@@ -2532,7 +2540,7 @@ test_ds = torchvision.datasets.ImageFolder(
 )
 ```
 
-#### 完整代码
+#### ！！！完整代码！！！
 
 ```python
 import torch
@@ -2769,7 +2777,7 @@ def fit(epoch, model, trainloader, testloader):
     return epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc
 ```
 
-#### 完整代码
+#### ！！！完整代码！！！
 
 ```python
 import torch
@@ -2831,7 +2839,7 @@ test_dl = torch.utils.data.DataLoader(
 # 加载模型
 model = torchvision.models.vgg16(pretrained=True)
 # 冻结参数
-for p in model.features.parameters():
+for p in model.features.parameters():				# 所有参数不可训练
     p.requires_grad = False
 # 模型参数修改
 model.classifier[-1].out_features = 4
@@ -2956,7 +2964,7 @@ model.fc = nn.Linear(in_f, 4)          # 将ResNet网络最后一层替换掉
 optim = torch.optim.Adam(model.fc.parameters(), lr=0.0001)
 ```
 
-#### 完整代码
+#### ！！！完整代码！！！
 
 ```python
 import torch
@@ -3021,15 +3029,15 @@ model = torchvision.models.resnet18(pretrained=True)
 for param in model.parameters():
     param.requires_grad = False
 # 提取模型最后一层
-in_f = model.fc.in_features    
-model.fc = nn.Linear(in_f, 4)          # 将ResNet网络最后一层替换掉
+in_f = model.fc.in_features    		 				# 替换输入层
+model.fc = nn.Linear(in_f, 4)          				# 将ResNet网络最后一层替换掉
 
 # 放在GPU训练
 if torch.cuda.is_available():
     model.to('cuda')
     
 # 优化函数——要跟着模型修改
-optim = torch.optim.Adam(model.fc.parameters(), lr=0.0001)
+optim = torch.optim.Adam(model.fc.parameters(), lr=0.0001)	# 只需要优化最后一层linear层，其他梯度参数是不变的
 
 # 损失函数
 loss_fn = nn.CrossEntropyLoss()
@@ -3039,7 +3047,7 @@ def fit(epoch, model, trainloader, testloader):
     correct = 0
     total = 0
     running_loss = 0
-    model.train()
+    model.train()			# 有BN层的时候需要设置模式
     for x, y in trainloader:
         if torch.cuda.is_available():
             x, y = x.to('cuda'), y.to('cuda')
@@ -3063,7 +3071,7 @@ def fit(epoch, model, trainloader, testloader):
     test_correct = 0
     test_total = 0
     test_running_loss = 0
-    model.eval()                                           
+    model.eval()			# 有BN层的时候需要设置模式                                           
     with torch.no_grad():
         for  x, y in testloader:
             if torch.cuda.is_available():
@@ -3118,3 +3126,332 @@ plt.legend()
 输出：
 
 ![image-20230918212508809](https://raw.githubusercontent.com/Noregret327/picture/master/202309182125873.png)
+
+
+
+### 9.6 模型微调
+
+#### 1.微调
+
+共同训练新添加的分类器层和部分或者全部卷积层。
+
+- 只有分类器已经训练好了，才能微调卷积的卷积层。
+- 如果有没有这样的话，刚开始的训练误差很大，微调之前这些卷积层学到的表示会被破坏掉。
+
+#### 2.步骤
+
+1. 在预训练卷积基础上添加自定义层
+2. 冻结卷积基所有层
+3. 训练添加的分类层
+4. 解冻卷积基的一部分层
+
+#### ！！！完整代码！！！
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import numpy as np
+import matplotlib.pyplot as plt
+%matplotlib inline
+import torchvision
+import os
+from torchvision import datasets, transforms
+
+# 创建目录
+base_dir = r'./dataset/4weather'					# 创建数据集基本目录
+train_dir = os.path.join(base_dir, 'train')			# 在数据集基本目录创建训练集目录
+test_dir = os.path.join(base_dir, 'test')			# 在数据集基本目录创建测试集目录
+
+# 创建数据集对象——tranform、train_ds、test_ds
+train_transform = transforms.Compose([
+    transforms.Resize(224),                                
+    transforms.RandomResizedCrop(192, scale=(0.6,1.0), ratio=(0.8,1.0)),
+    transforms.RandomHorizontalFlip(),                     # 随机翻转
+    transforms.RandomRotation(0.2),                        # 随机旋转
+    transforms.ColorJitter(brightness=0.5, contrast=0),    # 添加明亮度
+    transforms.ColorJitter(brightness=0, contrast=0.5),                    # 添加对比度
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                         std=[0.5, 0.5, 0.5])
+])
+test_transform = transforms.Compose([
+    transforms.Resize((192, 192)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                         std=[0.5, 0.5, 0.5])
+])
+
+train_ds = torchvision.datasets.ImageFolder(
+    train_dir,
+    transform=train_transform
+)
+test_ds = torchvision.datasets.ImageFolder(
+    test_dir, 
+    transform=test_transform
+)
+
+# 创建加载器——train_dl、test_dl
+BATCHSIZE = 32
+train_dl = torch.utils.data.DataLoader(
+    train_ds,
+    batch_size=BATCHSIZE,
+    shuffle=True
+)
+test_dl = torch.utils.data.DataLoader(
+    test_ds,
+    batch_size=BATCHSIZE
+)
+
+# 加载模型
+model = torchvision.models.resnet101(pretrained=True)
+
+# 修改模型参数
+for param in model.parameters():
+    param.requires_grad = False
+# 提取模型最后一层
+in_f = model.fc.in_features    		 				# 替换输入层
+model.fc = nn.Linear(in_f, 4)          				# 将ResNet网络最后一层替换掉
+
+# 查看模型
+model
+
+# 放在GPU训练
+if torch.cuda.is_available():
+    model.to('cuda')
+    
+# 损失函数
+loss_fn = nn.CrossEntropyLoss()
+from torch.optim import lr_scheduler
+optim = torch.optim.Adam(model.fc.parameters(), lr=0.001)
+exp_lr_scheduler = lr_scheduler.StepLR(optim, step_size=7, gamma=0.1)
+
+def fit(epoch, model, trainloader, testloader):
+    # 训练模型
+    correct = 0
+    total = 0
+    running_loss = 0
+    model.train()			# 有BN层的时候需要设置模式
+    for x, y in trainloader:
+        if torch.cuda.is_available():
+            x, y = x.to('cuda'), y.to('cuda')
+        y_pred = model(x)
+        loss = loss_fn(y_pred, y)
+        optim.zero_grad()
+        loss.backward()
+        optim.step()
+        with torch.no_grad():
+            y_pred = torch.argmax(y_pred, dim=1)
+            correct += (y_pred == y).sum().item()
+            total += y.size(0)
+            running_loss += loss.item()
+    
+    # 求解每个样本的loss和acc        
+    epoch_loss = running_loss / len(trainloader.dataset)
+    epoch_acc = correct / total
+    
+    
+    # 验证测试
+    test_correct = 0
+    test_total = 0
+    test_running_loss = 0
+    model.eval()			# 有BN层的时候需要设置模式                                           
+    with torch.no_grad():
+        for  x, y in testloader:
+            if torch.cuda.is_available():
+                x, y = x.to('cuda'), y.to('cuda')
+            y_pred = model(x)
+            loss = loss_fn(y_pred, y)
+            y_pred = torch.argmax(y_pred, dim=1)
+            test_correct += (y_pred == y).sum().item()
+            test_total += y.size(0)
+            test_running_loss += loss.item()
+    # 求解test的loss和acc         
+    epoch_test_loss = test_running_loss / len(testloader.dataset)
+    epoch_test_acc = test_correct / test_total
+        
+    print('epoch:', epoch, 
+          'loss:', round(epoch_loss, 3),
+          'accuracy:', round(epoch_acc, 3),
+          'test_loss:', round(epoch_test_loss, 3),
+          'test_accuracy:', round(epoch_test_acc, 3)
+         )
+        
+    return epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc
+
+# 训练次数
+epochs = 50
+# 记录训练集和测试集的loss和acc
+train_loss = []
+train_acc = []
+test_loss = []
+test_acc = []
+
+# 开始训练
+for epoch in range(epochs):
+    epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc = fit(epoch,
+                                                                 model,
+                                                                 train_dl,
+                                                                 test_dl)
+    train_loss.append(epoch_loss)
+    train_acc.append(epoch_acc)
+    test_loss.append(epoch_test_loss)
+    test_acc.append(epoch_test_acc)
+    
+# 绘图——微调之前
+plt.plot(range(1, epochs+1), train_acc, label='train_acc')
+plt.plot(range(1,epochs+1), test_acc, label='test_acc')
+plt.legend()
+
+plt.plot(range(1, epochs+1), train_loss, label='train_loss')
+plt.plot(range(1,epochs+1), test_loss, label='test_loss')
+plt.legend()   
+
+/////////////////////////////////////////////////////////
+# 微调——一定先将Linear训练好之后再微调，优化时优化模型的全部参数
+////////////////////////////////////////////////////////
+for param in modeleparametersparameters():
+    param.requires_grad = True
+
+# 设置训练额外批次
+extend_epoch = 50
+# 优化全部参数
+optim = torch.optim.Adam(model.parameters(), lr=0.0001)
+ 
+# 微调后的训练
+for epoch in range(extend_epoch):
+    epoch_loss, epoch_acc, epoch_test_loss, epoch_test_acc = fit(epoch,
+                                                                 model,
+                                                                 train_dl,
+                                                                 test_dl)
+    train_loss.append(epoch_loss)
+    train_acc.append(epoch_acc)
+    test_loss.append(epoch_test_loss)
+    test_acc.append(epoch_test_acc)
+
+# 绘图——微调之后
+plt.plot(range(1, extend_epoch+1), train_acc[-50:], label='train_acc_l')
+plt.plot(range(1,extend_epoch+1), test_acc[-50:], label='test_acc_l')
+plt.legend()
+
+plt.plot(range(1, extend_epoch+1), train_loss[-50:], label='train_loss_l')
+plt.plot(range(1,extend_epoch+1), test_loss[-50:], label='test_loss_l')
+plt.legend() 
+```
+
+微调前输出：
+
+```
+epoch: 0 loss: 0.033 accuracy: 0.584 test_loss: 0.015 test_accuracy: 0.88
+epoch: 1 loss: 0.016 accuracy: 0.872 test_loss: 0.009 test_accuracy: 0.929
+epoch: 2 loss: 0.011 accuracy: 0.906 test_loss: 0.007 test_accuracy: 0.924
+epoch: 3 loss: 0.008 accuracy: 0.943 test_loss: 0.006 test_accuracy: 0.938
+epoch: 4 loss: 0.008 accuracy: 0.943 test_loss: 0.006 test_accuracy: 0.938
+epoch: 5 loss: 0.007 accuracy: 0.942 test_loss: 0.006 test_accuracy: 0.938
+epoch: 6 loss: 0.007 accuracy: 0.943 test_loss: 0.006 test_accuracy: 0.938
+epoch: 7 loss: 0.005 accuracy: 0.956 test_loss: 0.005 test_accuracy: 0.942
+epoch: 8 loss: 0.006 accuracy: 0.956 test_loss: 0.005 test_accuracy: 0.947
+epoch: 9 loss: 0.005 accuracy: 0.963 test_loss: 0.006 test_accuracy: 0.929
+epoch: 10 loss: 0.005 accuracy: 0.947 test_loss: 0.005 test_accuracy: 0.951
+epoch: 11 loss: 0.006 accuracy: 0.953 test_loss: 0.005 test_accuracy: 0.947
+epoch: 12 loss: 0.005 accuracy: 0.943 test_loss: 0.005 test_accuracy: 0.947
+epoch: 13 loss: 0.005 accuracy: 0.963 test_loss: 0.005 test_accuracy: 0.951
+epoch: 14 loss: 0.004 accuracy: 0.963 test_loss: 0.006 test_accuracy: 0.938
+epoch: 15 loss: 0.004 accuracy: 0.964 test_loss: 0.005 test_accuracy: 0.947
+epoch: 16 loss: 0.004 accuracy: 0.958 test_loss: 0.006 test_accuracy: 0.933
+epoch: 17 loss: 0.004 accuracy: 0.959 test_loss: 0.005 test_accuracy: 0.947
+epoch: 18 loss: 0.004 accuracy: 0.957 test_loss: 0.005 test_accuracy: 0.938
+epoch: 19 loss: 0.004 accuracy: 0.954 test_loss: 0.005 test_accuracy: 0.951
+epoch: 20 loss: 0.005 accuracy: 0.966 test_loss: 0.005 test_accuracy: 0.951
+epoch: 21 loss: 0.006 accuracy: 0.933 test_loss: 0.005 test_accuracy: 0.947
+epoch: 22 loss: 0.004 accuracy: 0.957 test_loss: 0.004 test_accuracy: 0.956
+epoch: 23 loss: 0.004 accuracy: 0.966 test_loss: 0.005 test_accuracy: 0.956
+epoch: 24 loss: 0.004 accuracy: 0.959 test_loss: 0.005 test_accuracy: 0.951
+epoch: 25 loss: 0.006 accuracy: 0.954 test_loss: 0.005 test_accuracy: 0.951
+epoch: 26 loss: 0.004 accuracy: 0.954 test_loss: 0.005 test_accuracy: 0.956
+epoch: 27 loss: 0.004 accuracy: 0.961 test_loss: 0.005 test_accuracy: 0.956
+epoch: 28 loss: 0.003 accuracy: 0.964 test_loss: 0.005 test_accuracy: 0.956
+epoch: 29 loss: 0.005 accuracy: 0.959 test_loss: 0.005 test_accuracy: 0.947
+epoch: 30 loss: 0.005 accuracy: 0.953 test_loss: 0.005 test_accuracy: 0.947
+epoch: 31 loss: 0.003 accuracy: 0.971 test_loss: 0.005 test_accuracy: 0.951
+epoch: 32 loss: 0.003 accuracy: 0.976 test_loss: 0.006 test_accuracy: 0.951
+epoch: 33 loss: 0.003 accuracy: 0.973 test_loss: 0.006 test_accuracy: 0.951
+epoch: 34 loss: 0.005 accuracy: 0.961 test_loss: 0.006 test_accuracy: 0.951
+epoch: 35 loss: 0.003 accuracy: 0.97 test_loss: 0.006 test_accuracy: 0.947
+epoch: 36 loss: 0.003 accuracy: 0.976 test_loss: 0.005 test_accuracy: 0.956
+epoch: 37 loss: 0.005 accuracy: 0.949 test_loss: 0.005 test_accuracy: 0.947
+epoch: 38 loss: 0.003 accuracy: 0.963 test_loss: 0.006 test_accuracy: 0.951
+epoch: 39 loss: 0.004 accuracy: 0.971 test_loss: 0.006 test_accuracy: 0.964
+epoch: 40 loss: 0.005 accuracy: 0.954 test_loss: 0.005 test_accuracy: 0.947
+epoch: 41 loss: 0.004 accuracy: 0.966 test_loss: 0.005 test_accuracy: 0.956
+epoch: 42 loss: 0.004 accuracy: 0.947 test_loss: 0.006 test_accuracy: 0.951
+epoch: 43 loss: 0.004 accuracy: 0.952 test_loss: 0.005 test_accuracy: 0.956
+epoch: 44 loss: 0.003 accuracy: 0.971 test_loss: 0.005 test_accuracy: 0.951
+epoch: 45 loss: 0.003 accuracy: 0.973 test_loss: 0.005 test_accuracy: 0.956
+epoch: 46 loss: 0.003 accuracy: 0.972 test_loss: 0.006 test_accuracy: 0.947
+epoch: 47 loss: 0.003 accuracy: 0.981 test_loss: 0.006 test_accuracy: 0.951
+epoch: 48 loss: 0.003 accuracy: 0.972 test_loss: 0.005 test_accuracy: 0.951
+epoch: 49 loss: 0.003 accuracy: 0.972 test_loss: 0.005 test_accuracy: 0.956
+```
+
+![image-20230926111000801](https://raw.githubusercontent.com/Noregret327/picture/master/202309261110941.png)
+
+微调后输出：
+
+```
+epoch: 0 loss: 0.006 accuracy: 0.951 test_loss: 0.008 test_accuracy: 0.942
+epoch: 1 loss: 0.003 accuracy: 0.973 test_loss: 0.01 test_accuracy: 0.933
+epoch: 2 loss: 0.003 accuracy: 0.973 test_loss: 0.007 test_accuracy: 0.956
+epoch: 3 loss: 0.003 accuracy: 0.962 test_loss: 0.011 test_accuracy: 0.942
+epoch: 4 loss: 0.004 accuracy: 0.963 test_loss: 0.031 test_accuracy: 0.867
+epoch: 5 loss: 0.004 accuracy: 0.974 test_loss: 0.01 test_accuracy: 0.907
+epoch: 6 loss: 0.001 accuracy: 0.994 test_loss: 0.005 test_accuracy: 0.973
+epoch: 7 loss: 0.002 accuracy: 0.983 test_loss: 0.013 test_accuracy: 0.911
+epoch: 8 loss: 0.001 accuracy: 0.984 test_loss: 0.009 test_accuracy: 0.964
+epoch: 9 loss: 0.005 accuracy: 0.989 test_loss: 0.011 test_accuracy: 0.956
+epoch: 10 loss: 0.006 accuracy: 0.974 test_loss: 0.01 test_accuracy: 0.942
+epoch: 11 loss: 0.004 accuracy: 0.968 test_loss: 0.008 test_accuracy: 0.951
+epoch: 12 loss: 0.001 accuracy: 0.991 test_loss: 0.006 test_accuracy: 0.96
+epoch: 13 loss: 0.002 accuracy: 0.984 test_loss: 0.006 test_accuracy: 0.956
+epoch: 14 loss: 0.002 accuracy: 0.983 test_loss: 0.006 test_accuracy: 0.964
+epoch: 15 loss: 0.001 accuracy: 0.989 test_loss: 0.006 test_accuracy: 0.951
+epoch: 16 loss: 0.001 accuracy: 0.992 test_loss: 0.007 test_accuracy: 0.96
+epoch: 17 loss: 0.001 accuracy: 0.994 test_loss: 0.004 test_accuracy: 0.969
+epoch: 18 loss: 0.0 accuracy: 0.998 test_loss: 0.005 test_accuracy: 0.96
+epoch: 19 loss: 0.0 accuracy: 1.0 test_loss: 0.006 test_accuracy: 0.964
+epoch: 20 loss: 0.0 accuracy: 0.998 test_loss: 0.013 test_accuracy: 0.951
+epoch: 21 loss: 0.0 accuracy: 0.998 test_loss: 0.008 test_accuracy: 0.969
+epoch: 22 loss: 0.0 accuracy: 0.999 test_loss: 0.009 test_accuracy: 0.96
+epoch: 23 loss: 0.0 accuracy: 0.998 test_loss: 0.005 test_accuracy: 0.973
+epoch: 24 loss: 0.0 accuracy: 0.999 test_loss: 0.006 test_accuracy: 0.973
+epoch: 25 loss: 0.0 accuracy: 0.996 test_loss: 0.003 test_accuracy: 0.978
+epoch: 26 loss: 0.0 accuracy: 0.999 test_loss: 0.004 test_accuracy: 0.978
+epoch: 27 loss: 0.0 accuracy: 1.0 test_loss: 0.005 test_accuracy: 0.982
+epoch: 28 loss: 0.0 accuracy: 1.0 test_loss: 0.005 test_accuracy: 0.978
+epoch: 29 loss: 0.0 accuracy: 0.998 test_loss: 0.005 test_accuracy: 0.973
+epoch: 30 loss: 0.0 accuracy: 0.996 test_loss: 0.003 test_accuracy: 0.982
+epoch: 31 loss: 0.001 accuracy: 0.994 test_loss: 0.004 test_accuracy: 0.969
+epoch: 32 loss: 0.004 accuracy: 0.972 test_loss: 0.02 test_accuracy: 0.88
+epoch: 33 loss: 0.006 accuracy: 0.98 test_loss: 0.006 test_accuracy: 0.951
+epoch: 34 loss: 0.002 accuracy: 0.977 test_loss: 0.006 test_accuracy: 0.933
+epoch: 35 loss: 0.002 accuracy: 0.976 test_loss: 0.004 test_accuracy: 0.956
+epoch: 36 loss: 0.001 accuracy: 0.992 test_loss: 0.004 test_accuracy: 0.978
+epoch: 37 loss: 0.002 accuracy: 0.987 test_loss: 0.007 test_accuracy: 0.956
+epoch: 38 loss: 0.001 accuracy: 0.992 test_loss: 0.004 test_accuracy: 0.964
+epoch: 39 loss: 0.0 accuracy: 0.996 test_loss: 0.004 test_accuracy: 0.973
+epoch: 40 loss: 0.0 accuracy: 0.997 test_loss: 0.004 test_accuracy: 0.969
+epoch: 41 loss: 0.001 accuracy: 0.989 test_loss: 0.003 test_accuracy: 0.964
+epoch: 42 loss: 0.002 accuracy: 0.99 test_loss: 0.004 test_accuracy: 0.978
+epoch: 43 loss: 0.002 accuracy: 0.982 test_loss: 0.009 test_accuracy: 0.951
+epoch: 44 loss: 0.002 accuracy: 0.984 test_loss: 0.006 test_accuracy: 0.947
+epoch: 45 loss: 0.0 accuracy: 0.997 test_loss: 0.006 test_accuracy: 0.956
+epoch: 46 loss: 0.0 accuracy: 0.997 test_loss: 0.005 test_accuracy: 0.956
+epoch: 47 loss: 0.0 accuracy: 0.998 test_loss: 0.004 test_accuracy: 0.96
+epoch: 48 loss: 0.0 accuracy: 1.0 test_loss: 0.005 test_accuracy: 0.956
+epoch: 49 loss: 0.001 accuracy: 0.997 test_loss: 0.009 test_accuracy: 0.96
+```
+
+![image-20230926111029389](https://raw.githubusercontent.com/Noregret327/picture/master/202309261110462.png)
+
+## 10.Dataset数据输入
