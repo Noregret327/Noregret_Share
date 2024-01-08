@@ -96,3 +96,47 @@ python -m pip install requests chardet
 pip install pandas
 ```
 
+
+
+### 三、切换环境（Jupyer notebook）
+
+* 首先激活本地环境
+
+```
+conda activate tensorflow
+```
+
+* 然后安装ipykernel
+
+```
+conda install ipykernel
+```
+
+> 这个是jupyter组件
+
+* 将本地环境注入jupyter里面
+
+~~~
+python -m ipykernel install --user --name 本地环境名称 --display-name "在jupyter上显示的环境名称"
+~~~
+
+然后就可以在图中位置切换环境
+
+![image-20240108114017592](https://raw.githubusercontent.com/HXiudi/MK_picture/master/img202401081140732.png)
+
+
+
+### 四、打包环境
+
+打包环境：
+
+```cmd
+pip list --format=freeze > requirements.txt
+```
+
+安装打包环境：
+
+```
+pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
